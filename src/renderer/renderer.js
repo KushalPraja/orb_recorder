@@ -97,8 +97,6 @@ btnOutputDir.addEventListener('click', async () => {
   }
 });
 
-// ─── Countdown ──────────────────────────────────────────────────────
-
 // ─── Recording ──────────────────────────────────────────────────────
 
 btnRecord.addEventListener('click', async () => {
@@ -353,7 +351,7 @@ async function startProcessing() {
 // Listen for progress updates from main process
 electronAPI.onProgress((data) => {
   progressBar.style.width = `${data.percent}%`;
-  progressText.textContent = `${data.percent}% — frame ${data.frame}`;
+  progressText.textContent = `${data.percent}%`;
 });
 
 electronAPI.onProcessingDone((data) => {
