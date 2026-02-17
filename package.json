@@ -1,0 +1,23 @@
+{
+  "name": "screen-recorder",
+  "version": "1.0.0",
+  "description": "Desktop screen recorder with auto zoom/pan effects on clicks and scrolls",
+  "main": "src/main/index.js",
+  "scripts": {
+    "start": "electron .",
+    "test:post": "node scripts/test-postprocess.js",
+    "package": "electron-forge package",
+    "make": "electron-forge make"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.2.0",
+    "ffprobe-static": "^3.1.0",
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "^7.6.0",
+    "@electron-forge/maker-squirrel": "^7.6.0",
+    "@electron-forge/maker-zip": "^7.6.0",
+    "electron": "^33.0.0"
+  }
+}
