@@ -61,7 +61,6 @@ export function SettingsPage({ onNavigate }) {
           <div className="setting-row">
             <div className="setting-label">
               <span>Frame Rate</span>
-              <span className="setting-hint">Higher = smoother, larger files</span>
             </div>
             <select
               className="setting-select"

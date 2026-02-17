@@ -7,6 +7,7 @@ const api = window.electronAPI;
 export function HomePage({ onNavigate }) {
   const [recordings, setRecordings] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRecording, setSelectedRecording] = useState(null);
 
   const loadRecordings = useCallback(async () => {
     try {
@@ -94,14 +95,11 @@ export function HomePage({ onNavigate }) {
           </div>
         ) : (
           recordings.map((rec) => (
-            <div key={rec.sessionDir} className="recording-item">
-              <div className="recording-thumbnail">
-                {rec.thumbnailPath ? (
-                  <img src={`file://${rec.thumbnailPath}`} alt="" />
-                ) : (
-                  <Video size={20} strokeWidth={1.5} />
-                )}
-              </div>
+            <div
+              key={rec.sessionDir}
+              className="recording-item"
+              onClick={() => setSelectedRecording(rec)}
+            >
               <div className="recording-info">
                 <span className="recording-name">{rec.name || 'Untitled Recording'}</span>
                 <div className="recording-meta">
@@ -122,11 +120,12 @@ export function HomePage({ onNavigate }) {
                   )}
                 </div>
               </div>
+
               <div className="recording-actions">
                 {rec.outputPath && (
                   <button
                     className="icon-btn"
-                    onClick={() => handleOpen(rec.outputPath)}
+                    onClick={(e) => { e.stopPropagation(); handleOpen(rec.outputPath); }}
                     title="Show in folder"
                   >
                     <FolderOpen size={14} />
@@ -134,7 +133,7 @@ export function HomePage({ onNavigate }) {
                 )}
                 <button
                   className="icon-btn icon-btn-danger"
-                  onClick={() => handleDelete(rec.sessionDir)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(rec.sessionDir); }}
                   title="Delete recording"
                 >
                   <Trash2 size={14} />
@@ -144,6 +143,24 @@ export function HomePage({ onNavigate }) {
           ))
         )}
       </div>
+
+      {selectedRecording && (
+        <div className="mini-player-modal" onClick={() => setSelectedRecording(null)}>
+          <div className="mini-player-content" onClick={(e) => e.stopPropagation()}>
+            <div className="mini-player-header">
+              <strong>{selectedRecording.name || 'Recording'}</strong>
+              <button className="mini-player-close" onClick={() => setSelectedRecording(null)}>Close</button>
+            </div>
+            <video
+              className="mini-player-video"
+              src={`file://${selectedRecording.outputPath || selectedRecording.filePath}`}
+              controls
+              autoPlay
+            />
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
