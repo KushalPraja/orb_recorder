@@ -21,7 +21,7 @@
 
 .save-indicator {
   font-size: 11px;
-  color: var(--success);
+  color: var(--text-secondary);
   font-weight: 500;
 }
 

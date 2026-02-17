@@ -60,6 +60,7 @@ export function RecordPage({ onNavigate }) {
     if (!selectedSource) return;
 
     let stream = streamRef.current;
+    await api.setCaptureSource(selectedSource.id);
 
     // If no stream, acquire one
     if (!stream || stream.getTracks().every(t => t.readyState !== 'live')) {
@@ -112,7 +113,9 @@ export function RecordPage({ onNavigate }) {
       };
 
       track.addEventListener('ended', () => {
-        if (recording) stopRecording();
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+          stopRecording();
+        }
       });
 
       recorder.start(1000);
@@ -132,7 +135,7 @@ export function RecordPage({ onNavigate }) {
     }
   }, [selectedSource]);
 
-  const stopRecording = useCallback(async () => {
+  async function stopRecording() {
     if (!mediaRecorderRef.current) return;
 
     setRecording(false);
@@ -151,13 +154,22 @@ export function RecordPage({ onNavigate }) {
     }
 
     try {
-      const result = await api.stopRecording();
+      await api.stopRecording();
       await api.finishRecordingUi();
       setStatus('Saving recording...');
     } catch (err) {
       console.error('Failed to stop tracking:', err);
       await api.finishRecordingUi();
     }
+  }
+
+  useEffect(() => {
+    const unsubOverlayStop = api.onOverlayStopRequest(() => {
+      stopRecording();
+    });
+    return () => {
+      unsubOverlayStop();
+    };
   }, []);
 
   const handleRecordingStopped = useCallback(async () => {

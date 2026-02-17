@@ -58,6 +58,7 @@ let settings = loadSettings();
 
 // Current recording session state
 let recordingSession = null;
+let recordingOverlay = null;
 
 function showCountdownOverlay(seconds = 3) {
   return new Promise((resolve) => {
@@ -92,13 +93,18 @@ function showCountdownOverlay(seconds = 3) {
     <head>
       <meta charset="UTF-8" />
       <style>
-        body{margin:0;background:rgba(0,0,0,0.12);display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;font-family:Segoe UI,Arial,sans-serif}
-        .circle{width:190px;height:190px;border-radius:999px;background:rgba(14,14,32,0.88);display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,0.16);box-shadow:0 12px 40px rgba(0,0,0,0.35)}
-        .n{font-size:94px;font-weight:700;color:#fff;line-height:1}
+        body{margin:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;font-family:Inter,Segoe UI,Arial,sans-serif}
+        .stack{display:flex;flex-direction:column;align-items:center;gap:14px}
+        .circle{width:180px;height:180px;border-radius:999px;background:#101010;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.18);box-shadow:0 14px 40px rgba(0,0,0,0.45)}
+        .n{font-size:88px;font-weight:700;color:#f5f5f5;line-height:1}
+        .label{font-size:14px;letter-spacing:.4px;color:#b3b3b3}
       </style>
     </head>
     <body>
-      <div class="circle"><div id="n" class="n">${seconds}</div></div>
+      <div class="stack">
+        <div class="circle"><div id="n" class="n">${seconds}</div></div>
+        <div class="label">Recording starts now</div>
+      </div>
       <script>
         let remaining=${seconds};
         const el=document.getElementById('n');
@@ -120,12 +126,104 @@ function showCountdownOverlay(seconds = 3) {
   });
 }
 
+function closeRecordingOverlay() {
+  if (recordingOverlay && !recordingOverlay.isDestroyed()) {
+    recordingOverlay.close();
+  }
+  recordingOverlay = null;
+}
+
+function showRecordingOverlay(mainWindow) {
+  closeRecordingOverlay();
+
+  recordingOverlay = new BrowserWindow({
+    width: 280,
+    height: 66,
+    frame: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    movable: true,
+    transparent: true,
+    hasShadow: false,
+    webPreferences: {
+      nodeIntegration: true,
+      contextIsolation: false,
+      sandbox: false,
+    },
+  });
+
+  recordingOverlay.setAlwaysOnTop(true, 'screen-saver');
+  recordingOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  const html = `<!DOCTYPE html>
+  <html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      *{box-sizing:border-box}
+      body{margin:0;padding:10px;background:transparent;font-family:Inter,Segoe UI,Arial,sans-serif}
+      .bar{height:46px;border-radius:12px;background:rgba(12,12,12,.95);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;gap:10px;padding:0 12px;-webkit-app-region:drag}
+      .dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1.6s ease-in-out infinite;flex:none}
+      .timer{font-weight:700;font-size:14px;letter-spacing:.4px;color:#f5f5f5;min-width:54px}
+      .label{font-size:12px;color:#b3b3b3;flex:1}
+      .stop{border:1px solid rgba(239,68,68,.55);background:rgba(239,68,68,.16);color:#fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;-webkit-app-region:no-drag}
+      .stop:hover{background:rgba(239,68,68,.24)}
+      @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <span class="dot"></span>
+      <span id="timer" class="timer">00:00</span>
+      <span class="label">Recording</span>
+      <button class="stop" id="stop">Stop</button>
+    </div>
+    <script>
+      const { ipcRenderer } = require('electron');
+      const timerEl = document.getElementById('timer');
+      const stopBtn = document.getElementById('stop');
+      const start = Date.now();
+      const interval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - start) / 1000);
+        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
+        const secs = String(elapsed % 60).padStart(2, '0');
+        timerEl.textContent = mins + ':' + secs;
+      }, 1000);
+      stopBtn.addEventListener('click', () => ipcRenderer.send('recording:overlay-stop-clicked'));
+      window.addEventListener('beforeunload', () => clearInterval(interval));
+    </script>
+  </body>
+  </html>`;
+
+  recordingOverlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  recordingOverlay.on('closed', () => {
+    recordingOverlay = null;
+  });
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    const [mainX, mainY] = mainWindow.getPosition();
+    const [mainWidth] = mainWindow.getSize();
+    recordingOverlay.setPosition(mainX + mainWidth - 320, mainY + 60, false);
+  }
+}
+
 /**
  * Register all IPC handlers.
  * @param {BrowserWindow} mainWindow  The main app window
  */
-function registerIpcHandlers(mainWindow) {
+function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
   // ─── Recording Control ────────────────────────────────────────────
+
+  ipcMain.handle(IPC.SET_CAPTURE_SOURCE, async (_event, sourceId) => {
+    if (typeof setSelectedCaptureSource === 'function') {
+      setSelectedCaptureSource(sourceId);
+    }
+    return true;
+  });
 
   ipcMain.handle(IPC.START_RECORDING, async () => {
     const timestamp = Date.now();
@@ -142,6 +240,8 @@ function registerIpcHandlers(mainWindow) {
       startTime: timestamp,
       sessionDir,
     };
+
+    showRecordingOverlay(mainWindow);
 
     console.log(`[IPC] Recording started — session: ${sessionDir}`);
     return { sessionDir, startTime: timestamp };
@@ -165,6 +265,8 @@ function registerIpcHandlers(mainWindow) {
       events,
     };
 
+    closeRecordingOverlay();
+
     console.log(`[IPC] Recording stopped — ${events.length} events captured`);
     return result;
   });
@@ -184,6 +286,13 @@ function registerIpcHandlers(mainWindow) {
       mainWindow.focus();
     }
     return true;
+  });
+
+  ipcMain.removeAllListeners('recording:overlay-stop-clicked');
+  ipcMain.on('recording:overlay-stop-clicked', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.OVERLAY_STOP_REQUEST);
+    }
   });
 
   // ─── Save Recording Blob ──────────────────────────────────────────

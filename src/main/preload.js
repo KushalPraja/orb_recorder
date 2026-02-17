@@ -6,8 +6,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 const IPC = {
   START_RECORDING: 'recording:start',
   STOP_RECORDING: 'recording:stop',
+  SET_CAPTURE_SOURCE: 'recording:set-capture-source',
   PREPARE_RECORDING_UI: 'recording:prepare-ui',
   FINISH_RECORDING_UI: 'recording:finish-ui',
+  OVERLAY_STOP_REQUEST: 'recording:overlay-stop-request',
   SAVE_RECORDING: 'recording:save',
   GET_RECORDINGS: 'recordings:list',
   DELETE_RECORDING: 'recordings:delete',
@@ -26,9 +28,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Recording ─────────────────────────────────────────────────
   startRecording: () => ipcRenderer.invoke(IPC.START_RECORDING),
   stopRecording: () => ipcRenderer.invoke(IPC.STOP_RECORDING),
+  setCaptureSource: (sourceId) => ipcRenderer.invoke(IPC.SET_CAPTURE_SOURCE, sourceId),
   prepareRecordingUi: () => ipcRenderer.invoke(IPC.PREPARE_RECORDING_UI),
   finishRecordingUi: () => ipcRenderer.invoke(IPC.FINISH_RECORDING_UI),
   saveRecording: (buffer) => ipcRenderer.invoke(IPC.SAVE_RECORDING, buffer),
+
+  onOverlayStopRequest: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC.OVERLAY_STOP_REQUEST, handler);
+    return () => ipcRenderer.removeListener(IPC.OVERLAY_STOP_REQUEST, handler);
+  },
 
   // ─── Recordings Management ────────────────────────────────────
   getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),

@@ -7,18 +7,24 @@ const fs = require('fs');
 const { registerIpcHandlers } = require('./ipc-handlers');
 
 let mainWindow = null;
+let selectedCaptureSourceId = null;
+
+function setSelectedCaptureSource(sourceId) {
+  selectedCaptureSourceId = sourceId || null;
+}
 
 // Detect if running in dev mode (vite dev server)
 const isDev = process.argv.includes('--dev');
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 520,
-    height: 680,
-    minWidth: 420,
-    minHeight: 520,
+    width: 1180,
+    height: 760,
+    minWidth: 980,
+    minHeight: 620,
     resizable: true,
     title: 'Screen Recorder',
+    icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'Document.ico'),
     backgroundColor: '#0a0a0a',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -71,8 +77,12 @@ function createWindow() {
         console.log(`[Main] Found ${sources.length} screen source(s)`);
 
         if (sources.length > 0) {
-          console.log(`[Main] Granting access to: "${sources[0].name}" (${sources[0].id})`);
-          callback({ video: sources[0] });
+          const selected = selectedCaptureSourceId
+            ? sources.find((source) => source.id === selectedCaptureSourceId)
+            : null;
+          const chosenSource = selected || sources[0];
+          console.log(`[Main] Granting access to: "${chosenSource.name}" (${chosenSource.id})`);
+          callback({ video: chosenSource });
         } else {
           console.error('[Main] No screen sources found');
           callback({});
@@ -85,7 +95,7 @@ function createWindow() {
   );
 
   // Register IPC handlers
-  registerIpcHandlers(mainWindow);
+  registerIpcHandlers(mainWindow, setSelectedCaptureSource);
 
   mainWindow.on('closed', () => {
     mainWindow = null;

@@ -42,8 +42,10 @@ module.exports = {
   IPC: {
     START_RECORDING: 'recording:start',
     STOP_RECORDING: 'recording:stop',
+    SET_CAPTURE_SOURCE: 'recording:set-capture-source',
     PREPARE_RECORDING_UI: 'recording:prepare-ui',
     FINISH_RECORDING_UI: 'recording:finish-ui',
+    OVERLAY_STOP_REQUEST: 'recording:overlay-stop-request',
     SAVE_RECORDING: 'recording:save',
     GET_RECORDINGS: 'recordings:list',
     DELETE_RECORDING: 'recordings:delete',
