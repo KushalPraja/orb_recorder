@@ -61,11 +61,6 @@ function probeVideo(filePath) {
         if (!videoStream) {
           return reject(new Error('No video stream found'));
         }
-
-        // ── Frame rate ──────────────────────────────────────────
-        // WebM from Chrome reports r_frame_rate as 1000/1 (VFR timebase)
-        // and avg_frame_rate as 0/0.  Neither is useful.  We prefer
-        // avg_frame_rate if non-zero, else fall back to 30.
         let fps = 30;
         if (videoStream.avg_frame_rate && videoStream.avg_frame_rate !== '0/0') {
           const [num, den] = videoStream.avg_frame_rate.split('/').map(Number);

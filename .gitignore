@@ -3,3 +3,5 @@ out/
 recordings/
 .tmp_segments/
 *.webm
+.pybuild/
+bin/

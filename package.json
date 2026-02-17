@@ -2,10 +2,14 @@
   "name": "screen-recorder",
   "version": "1.0.0",
   "description": "Desktop screen recorder with auto zoom/pan effects on clicks and scrolls",
+  "author": "Kushal Prajapati",
   "main": "src/main/index.js",
   "scripts": {
     "start": "electron .",
+    "build:processor": "node scripts/build-processor.js",
+    "prepackage": "npm run build:processor",
     "package": "electron-forge package",
+    "premake": "npm run build:processor",
     "make": "electron-forge make"
   },
   "dependencies": {

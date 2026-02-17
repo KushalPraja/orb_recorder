@@ -3,6 +3,7 @@ module.exports = {
     asar: {
       unpack: '**/{ffmpeg-static,ffprobe-static,uiohook-napi}/**'
     },
+    extraResource: ['./bin'],
     name: 'ScreenRecorder',
     icon: './assets/icon'
   },
@@ -12,10 +13,6 @@ module.exports = {
       config: {
         name: 'ScreenRecorder'
       }
-    },
-    {
-      name: '@electron-forge/maker-zip',
-      platforms: ['win32']
     }
   ]
 };

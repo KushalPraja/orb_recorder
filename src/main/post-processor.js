@@ -26,6 +26,20 @@ function getPythonPath() {
   return 'python3';
 }
 
+function getProcessorBinaryPath() {
+  const localBin = path.join(__dirname, '..', '..', 'bin', process.platform === 'win32' ? 'screen_processor.exe' : 'screen_processor');
+  if (fs.existsSync(localBin)) {
+    return localBin;
+  }
+
+  const packagedBin = path.join(process.resourcesPath || '', 'bin', process.platform === 'win32' ? 'screen_processor.exe' : 'screen_processor');
+  if (fs.existsSync(packagedBin)) {
+    return packagedBin;
+  }
+
+  return null;
+}
+
 function getScriptPath() {
   let p = path.join(__dirname, '..', '..', 'scripts', 'process.py');
   if (!fs.existsSync(p)) {
@@ -48,13 +62,14 @@ async function processVideo(opts) {
     throw new Error(`Recording not found: ${inputPath}`);
   }
 
-  const scriptPath = getScriptPath();
-  if (!fs.existsSync(scriptPath)) {
-    throw new Error(`Python processor not found: ${scriptPath}`);
-  }
-
-  const pythonBin = getPythonPath();
   const ffmpegBin = getFfmpegPath();
+  const processorBinPath = getProcessorBinaryPath();
+  const scriptPath = processorBinPath ? null : getScriptPath();
+  const pythonBin = processorBinPath ? null : getPythonPath();
+
+  if (!processorBinPath && !fs.existsSync(scriptPath)) {
+    throw new Error(`Processor not found (checked binary and script): ${scriptPath}`);
+  }
 
   const zoom = Number(zoomFactor) || DEFAULT_ZOOM_FACTOR;
   const hold = Number(zoomDuration) || DEFAULT_ZOOM_DURATION;
@@ -91,17 +106,28 @@ async function processVideo(opts) {
   console.log(`[PostProcessor] Spawning Python processor…`);
 
   return new Promise((resolve, reject) => {
-    const args = [
-      scriptPath,
-      cleanInputPath,
-      eventsPath,
-      outPath,
-      '--zoom', String(zoom),
-      '--hold', String(hold),
-      '--ffmpeg', ffmpegBin,
-    ];
+    const args = processorBinPath
+      ? [
+        cleanInputPath,
+        eventsPath,
+        outPath,
+        '--zoom', String(zoom),
+        '--hold', String(hold),
+        '--ffmpeg', ffmpegBin,
+      ]
+      : [
+        scriptPath,
+        cleanInputPath,
+        eventsPath,
+        outPath,
+        '--zoom', String(zoom),
+        '--hold', String(hold),
+        '--ffmpeg', ffmpegBin,
+      ];
 
-    const proc = spawn(pythonBin, args, {
+    const command = processorBinPath || pythonBin;
+
+    const proc = spawn(command, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
@@ -155,8 +181,9 @@ async function processVideo(opts) {
 
       if (err.code === 'ENOENT') {
         reject(new Error(
-          `Python not found (tried "${pythonBin}"). ` +
-          'Install Python 3 and run: pip install opencv-python numpy'
+          processorBinPath
+            ? `Bundled processor not found (tried "${command}").`
+            : `Python not found (tried "${pythonBin}"). Install Python 3 and run: pip install opencv-python numpy`
         ));
       } else {
         reject(err);
