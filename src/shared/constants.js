@@ -43,7 +43,6 @@ module.exports = {
     FINISH_RECORDING_UI: 'recording:finish-ui',
     SAVE_RECORDING: 'recording:save',
     PROCESS_VIDEO: 'video:process',
-    REPROCESS_LAST_SESSION: 'video:reprocessLastSession',
     PROCESSING_PROGRESS: 'video:progress',
     PROCESSING_DONE: 'video:done',
     PROCESSING_ERROR: 'video:error',

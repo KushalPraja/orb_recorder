@@ -17,17 +17,9 @@ const {
   DEFAULT_ZOOM_DURATION,
   DEFAULT_FPS,
 } = require('../shared/constants');
-const { remuxToCleanMp4 } = require('./ffmpeg-utils');
+const { getFfmpegPath, remuxToCleanMp4 } = require('./ffmpeg-utils');
 
 /* ─── Resolve binaries ─────────────────────────────────────────────── */
-
-function getFfmpegPath() {
-  let fp = require('ffmpeg-static');
-  if (fp && fp.includes('app.asar')) {
-    fp = fp.replace('app.asar', 'app.asar.unpacked');
-  }
-  return fp;
-}
 
 function getPythonPath() {
   if (process.platform === 'win32') return 'python';

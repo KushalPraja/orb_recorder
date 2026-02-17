@@ -10,7 +10,6 @@ const IPC = {
   FINISH_RECORDING_UI: 'recording:finish-ui',
   SAVE_RECORDING: 'recording:save',
   PROCESS_VIDEO: 'video:process',
-  REPROCESS_LAST_SESSION: 'video:reprocessLastSession',
   PROCESSING_PROGRESS: 'video:progress',
   PROCESSING_DONE: 'video:done',
   PROCESSING_ERROR: 'video:error',
@@ -30,7 +29,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // ─── Post-Processing ──────────────────────────────────────────
   processVideo: (opts) => ipcRenderer.invoke(IPC.PROCESS_VIDEO, opts),
-  reprocessLastSession: () => ipcRenderer.invoke(IPC.REPROCESS_LAST_SESSION),
 
   onProgress: (callback) => {
     const handler = (_event, data) => callback(data);

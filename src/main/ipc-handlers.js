@@ -27,25 +27,6 @@ let settings = {
 // Current recording session state
 let recordingSession = null;
 
-function findLatestSessionDir(baseDir) {
-  if (!fs.existsSync(baseDir)) return null;
-
-  const candidates = fs.readdirSync(baseDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => {
-      const sessionDir = path.join(baseDir, entry.name);
-      const recordingPath = path.join(sessionDir, RAW_RECORDING_FILE);
-      if (!fs.existsSync(recordingPath)) return null;
-
-      const stat = fs.statSync(sessionDir);
-      return { sessionDir, mtimeMs: stat.mtimeMs };
-    })
-    .filter(Boolean)
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
-
-  return candidates.length ? candidates[0].sessionDir : null;
-}
-
 function showCountdownOverlay(seconds = 3) {
   return new Promise((resolve) => {
     const display = screen.getPrimaryDisplay();
@@ -207,30 +188,6 @@ function registerIpcHandlers(mainWindow) {
 
       mainWindow.webContents.send(IPC.PROCESSING_DONE, { outputPath });
       return outputPath;
-    } catch (err) {
-      mainWindow.webContents.send(IPC.PROCESSING_ERROR, { error: err.message });
-      throw err;
-    }
-  });
-
-  ipcMain.handle(IPC.REPROCESS_LAST_SESSION, async () => {
-    const sessionDir = findLatestSessionDir(settings.outputDir);
-    if (!sessionDir) {
-      throw new Error(`No previous sessions found in ${settings.outputDir}`);
-    }
-
-    try {
-      const outputPath = await processVideo({
-        recordingDir: sessionDir,
-        zoomFactor: settings.zoomFactor,
-        zoomDuration: settings.zoomDuration,
-        onProgress: (progress) => {
-          mainWindow.webContents.send(IPC.PROCESSING_PROGRESS, progress);
-        },
-      });
-
-      mainWindow.webContents.send(IPC.PROCESSING_DONE, { outputPath });
-      return { outputPath, sessionDir };
     } catch (err) {
       mainWindow.webContents.send(IPC.PROCESSING_ERROR, { error: err.message });
       throw err;

@@ -33,7 +33,6 @@ let isRecording = false;
 let mediaRecorder = null;
 let recordedChunks = [];
 let timerInterval = null;
-let recordingStartTime = 0;
 let currentSessionDir = null;
 let outputFilePath = null;
 let countdownActive = false;
@@ -168,7 +167,6 @@ async function startRecording() {
     log('Starting input tracker in main process…');
     const session = await electronAPI.startRecording();
     currentSessionDir = session.sessionDir;
-    recordingStartTime = session.startTime;
     log('Session created:', session.sessionDir);
 
     // Set up MediaRecorder
@@ -313,7 +311,7 @@ async function handleRecordingStopped() {
 function initializeProcessingPanel() {
   processingSection.classList.remove('hidden');
   progressBar.style.width = '0%';
-  progressText.textContent = 'Auto-edit this recording or reprocess your latest saved session';
+  progressText.textContent = 'Auto-edit this recording with zoom/pan effects';
   showProcessButtons();
 }
 
@@ -325,23 +323,18 @@ function showProcessButtons() {
     <button id="btn-process" class="btn-primary" ${currentHint}>
       Auto-Edit Video
     </button>
-    <button id="btn-reprocess-last" class="btn-secondary">
-      Reprocess Last Session
-    </button>
   `;
 
   const btnProcess = document.getElementById('btn-process');
-  const btnReprocessLast = document.getElementById('btn-reprocess-last');
 
   if (btnProcess && !disableCurrent) {
     btnProcess.addEventListener('click', startProcessing);
   }
-  btnReprocessLast.addEventListener('click', startReprocessLastSession);
 }
 
 async function startProcessing() {
   if (!currentSessionDir) {
-    progressText.textContent = 'No current session to process. Use "Reprocess Last Session".';
+    progressText.textContent = 'No current session to process. Record once first.';
     return;
   }
 
@@ -352,20 +345,6 @@ async function startProcessing() {
     outputFilePath = await electronAPI.processVideo({
       sessionDir: currentSessionDir,
     });
-  } catch (err) {
-    progressText.textContent = `Error: ${err.message}`;
-  }
-}
-
-async function startReprocessLastSession() {
-  processingActions.innerHTML = '';
-  progressText.textContent = 'Processing last session…';
-
-  try {
-    const result = await electronAPI.reprocessLastSession();
-    if (result && result.sessionDir) {
-      currentSessionDir = result.sessionDir;
-    }
   } catch (err) {
     progressText.textContent = `Error: ${err.message}`;
   }
