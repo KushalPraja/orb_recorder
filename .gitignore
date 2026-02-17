@@ -5,3 +5,4 @@ recordings/
 *.webm
 .pybuild/
 bin/
+dist/

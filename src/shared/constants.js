@@ -35,6 +35,9 @@ module.exports = {
   EVENTS_FILE: 'events.json',
   OUTPUT_FILE: 'output.mp4',
 
+  // Settings file name
+  SETTINGS_FILE: 'settings.json',
+
   // IPC channels
   IPC: {
     START_RECORDING: 'recording:start',
@@ -42,6 +45,9 @@ module.exports = {
     PREPARE_RECORDING_UI: 'recording:prepare-ui',
     FINISH_RECORDING_UI: 'recording:finish-ui',
     SAVE_RECORDING: 'recording:save',
+    GET_RECORDINGS: 'recordings:list',
+    DELETE_RECORDING: 'recordings:delete',
+    GET_SOURCES: 'sources:list',
     PROCESS_VIDEO: 'video:process',
     PROCESSING_PROGRESS: 'video:progress',
     PROCESSING_DONE: 'video:done',

@@ -9,6 +9,9 @@ const IPC = {
   PREPARE_RECORDING_UI: 'recording:prepare-ui',
   FINISH_RECORDING_UI: 'recording:finish-ui',
   SAVE_RECORDING: 'recording:save',
+  GET_RECORDINGS: 'recordings:list',
+  DELETE_RECORDING: 'recordings:delete',
+  GET_SOURCES: 'sources:list',
   PROCESS_VIDEO: 'video:process',
   PROCESSING_PROGRESS: 'video:progress',
   PROCESSING_DONE: 'video:done',
@@ -26,6 +29,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   prepareRecordingUi: () => ipcRenderer.invoke(IPC.PREPARE_RECORDING_UI),
   finishRecordingUi: () => ipcRenderer.invoke(IPC.FINISH_RECORDING_UI),
   saveRecording: (buffer) => ipcRenderer.invoke(IPC.SAVE_RECORDING, buffer),
+
+  // ─── Recordings Management ────────────────────────────────────
+  getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),
+  deleteRecording: (sessionDir) => ipcRenderer.invoke(IPC.DELETE_RECORDING, sessionDir),
+
+  // ─── Screen Sources ───────────────────────────────────────────
+  getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),
 
   // ─── Post-Processing ──────────────────────────────────────────
   processVideo: (opts) => ipcRenderer.invoke(IPC.PROCESS_VIDEO, opts),

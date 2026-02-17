@@ -3,42 +3,56 @@
 
 const { app, BrowserWindow, session, desktopCapturer } = require('electron');
 const path = require('path');
+const fs = require('fs');
 const { registerIpcHandlers } = require('./ipc-handlers');
 
 let mainWindow = null;
 
+// Detect if running in dev mode (vite dev server)
+const isDev = process.argv.includes('--dev');
+
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 600,
-    minWidth: 400,
-    minHeight: 500,
+    width: 520,
+    height: 680,
+    minWidth: 420,
+    minHeight: 520,
     resizable: true,
     title: 'Screen Recorder',
-    backgroundColor: '#0b0b1a',
+    backgroundColor: '#0a0a0a',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0b0b1a',
-      symbolColor: '#ffffff',
-      height: 36,
+      color: '#0a0a0a',
+      symbolColor: '#888888',
+      height: 32,
     },
     webPreferences: {
       preload: path.join(__dirname, '..', 'main', 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      webSecurity: false, // allow loading file:// URLs for video preview
     },
   });
 
-  mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // Load the renderer — use Vite dev server in dev, built files in prod
+  const distIndex = path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html');
+  const srcIndex = path.join(__dirname, '..', 'renderer', 'index.html');
+
+  if (isDev) {
+    // In dev mode, try Vite dev server first, fallback to src file
+    mainWindow.loadURL('http://localhost:5173').catch(() => {
+      mainWindow.loadFile(srcIndex);
+    });
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
+  } else if (fs.existsSync(distIndex)) {
+    mainWindow.loadFile(distIndex);
+  } else {
+    mainWindow.loadFile(srcIndex);
+  }
 
   // Remove menu bar for cleaner look
   mainWindow.setMenuBarVisibility(false);
-
-  // Open DevTools in development
-  if (process.argv.includes('--dev')) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
 
   // ─── Desktop Capture Permission ─────────────────────────────────
   // Grant screen capture access automatically.

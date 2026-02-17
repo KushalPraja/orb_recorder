@@ -5,7 +5,11 @@ module.exports = {
     },
     extraResource: ['./bin'],
     name: 'ScreenRecorder',
-    icon: './assets/icon'
+    icon: './assets/icon',
+    ignore: [
+      /^\/src\/renderer\/(?!.*\.html$)/,  // exclude renderer source (built files in dist/)
+      /^\/\.vite/,
+    ],
   },
   makers: [
     {

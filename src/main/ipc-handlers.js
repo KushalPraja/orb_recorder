@@ -1,7 +1,7 @@
 // IPC Handlers — bridge between renderer UI and backend modules.
 // Registered in the main process.
 
-const { ipcMain, dialog, shell, BrowserWindow, screen } = require('electron');
+const { ipcMain, dialog, shell, BrowserWindow, screen, desktopCapturer } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const inputTracker = require('./input-tracker');
@@ -14,15 +14,47 @@ const {
   DEFAULT_OUTPUT_DIR,
   RAW_RECORDING_FILE,
   EVENTS_FILE,
+  OUTPUT_FILE,
+  SETTINGS_FILE,
 } = require('../shared/constants');
 
-// In-memory settings (persists for the session)
-let settings = {
-  fps: DEFAULT_FPS,
-  zoomFactor: DEFAULT_ZOOM_FACTOR,
-  zoomDuration: DEFAULT_ZOOM_DURATION,
-  outputDir: DEFAULT_OUTPUT_DIR,
-};
+// ─── Persistent Settings ────────────────────────────────────────────
+
+function getSettingsPath() {
+  const { app } = require('electron');
+  return path.join(app.getPath('userData'), SETTINGS_FILE);
+}
+
+function loadSettings() {
+  const defaults = {
+    fps: DEFAULT_FPS,
+    zoomFactor: DEFAULT_ZOOM_FACTOR,
+    zoomDuration: DEFAULT_ZOOM_DURATION,
+    outputDir: DEFAULT_OUTPUT_DIR,
+  };
+
+  try {
+    const filePath = getSettingsPath();
+    if (fs.existsSync(filePath)) {
+      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      return { ...defaults, ...data };
+    }
+  } catch (err) {
+    console.error('[Settings] Failed to load settings:', err);
+  }
+  return defaults;
+}
+
+function saveSettings(settings) {
+  try {
+    const filePath = getSettingsPath();
+    fs.writeFileSync(filePath, JSON.stringify(settings, null, 2));
+  } catch (err) {
+    console.error('[Settings] Failed to save settings:', err);
+  }
+}
+
+let settings = loadSettings();
 
 // Current recording session state
 let recordingSession = null;
@@ -202,6 +234,7 @@ function registerIpcHandlers(mainWindow) {
 
   ipcMain.handle(IPC.SET_SETTINGS, async (_event, newSettings) => {
     settings = { ...settings, ...newSettings };
+    saveSettings(settings);
     console.log('[IPC] Settings updated:', settings);
     return settings;
   });
@@ -217,6 +250,7 @@ function registerIpcHandlers(mainWindow) {
 
     if (!result.canceled && result.filePaths.length > 0) {
       settings.outputDir = result.filePaths[0];
+      saveSettings(settings);
       return settings.outputDir;
     }
     return null;
@@ -227,6 +261,81 @@ function registerIpcHandlers(mainWindow) {
       shell.showItemInFolder(filePath);
     } else if (recordingSession) {
       shell.openPath(recordingSession.sessionDir);
+    }
+  });
+
+  // ─── Screen Sources ──────────────────────────────────────────────
+
+  ipcMain.handle(IPC.GET_SOURCES, async () => {
+    try {
+      const sources = await desktopCapturer.getSources({
+        types: ['screen'],
+        thumbnailSize: { width: 320, height: 200 },
+      });
+
+      return sources.map((src) => ({
+        id: src.id,
+        name: src.name,
+        thumbnail: src.thumbnail.toDataURL(),
+      }));
+    } catch (err) {
+      console.error('[IPC] Failed to get sources:', err);
+      return [];
+    }
+  });
+
+  // ─── Recordings Management ────────────────────────────────────────
+
+  ipcMain.handle(IPC.GET_RECORDINGS, async () => {
+    try {
+      const outputDir = settings.outputDir;
+      if (!fs.existsSync(outputDir)) return [];
+
+      const entries = fs.readdirSync(outputDir, { withFileTypes: true });
+      const recordings = [];
+
+      for (const entry of entries) {
+        if (!entry.isDirectory()) continue;
+
+        const sessionDir = path.join(outputDir, entry.name);
+        const rawFile = path.join(sessionDir, RAW_RECORDING_FILE);
+        const outputFile = path.join(sessionDir, OUTPUT_FILE);
+
+        if (!fs.existsSync(rawFile)) continue;
+
+        const stat = fs.statSync(rawFile);
+        const hasOutput = fs.existsSync(outputFile);
+
+        recordings.push({
+          sessionDir,
+          name: entry.name,
+          timestamp: stat.mtimeMs,
+          size: stat.size,
+          filePath: rawFile,
+          outputPath: hasOutput ? outputFile : null,
+          duration: null, // could parse from events
+        });
+      }
+
+      // Sort newest first
+      recordings.sort((a, b) => b.timestamp - a.timestamp);
+      return recordings;
+    } catch (err) {
+      console.error('[IPC] Failed to list recordings:', err);
+      return [];
+    }
+  });
+
+  ipcMain.handle(IPC.DELETE_RECORDING, async (_event, sessionDir) => {
+    try {
+      if (sessionDir && fs.existsSync(sessionDir)) {
+        fs.rmSync(sessionDir, { recursive: true, force: true });
+        console.log(`[IPC] Deleted recording: ${sessionDir}`);
+      }
+      return true;
+    } catch (err) {
+      console.error('[IPC] Failed to delete recording:', err);
+      throw err;
     }
   });
 }
