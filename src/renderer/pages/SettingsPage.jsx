@@ -78,6 +78,24 @@ export function SettingsPage({ onNavigate }) {
               <span>Change</span>
             </button>
           </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <span>Overlay Position</span>
+            </div>
+            <select
+              className="setting-select"
+              value={settings.overlayPosition ?? "bottom-center"}
+              onChange={(e) => handleUpdate("overlayPosition", e.target.value)}
+            >
+              <option value="bottom-center">Bottom Center</option>
+              <option value="bottom-left">Bottom Left</option>
+              <option value="bottom-right">Bottom Right</option>
+              <option value="top-center">Top Center</option>
+              <option value="top-left">Top Left</option>
+              <option value="top-right">Top Right</option>
+            </select>
+          </div>
         </div>
 
         {/* Post-processing section */}

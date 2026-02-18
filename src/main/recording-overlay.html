@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      width: 100%; height: 100%;
+      background: transparent;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono',
+                   'Menlo', 'Consolas', 'Courier New', monospace;
+    }
+
+    .wrap {
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Always-visible pill ────────────────────────────────────── */
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 11px 7px 12px;
+      border-radius: 12px;
+      background: rgba(9, 9, 11, 0.88);
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      box-shadow: 0 4px 28px rgba(0, 0, 0, 0.55),
+                  inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      -webkit-app-region: drag;
+      cursor: default;
+      user-select: none;
+    }
+
+    /* ── Red dot ──────────────────────────────────────────────── */
+    .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #ff4d4f;
+      flex-shrink: 0;
+      animation: throb 1.8s ease-in-out infinite;
+    }
+    @keyframes throb {
+      0%, 100% { opacity: 1;    transform: scale(1);    }
+      50%       { opacity: 0.3; transform: scale(0.65); }
+    }
+
+    /* ── Timer ────────────────────────────────────────────────── */
+    .timer {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: #fff;
+      min-width: 46px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    /* ── Label ────────────────────────────────────────────────── */
+    .lbl {
+      font-size: 10px;
+      font-weight: 400;
+      color: rgba(255, 255, 255, 0.30);
+      letter-spacing: .16em;
+      text-transform: uppercase;
+    }
+
+    /* ── Stop button ──────────────────────────────────────────── */
+    .stop {
+      -webkit-app-region: no-drag;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px; height: 22px;
+      padding: 0;
+      border: 1px solid rgba(255, 77, 79, 0.22);
+      border-radius: 6px;
+      background: rgba(255, 77, 79, 0.10);
+      transition: background 0.12s ease;
+    }
+    .stop:hover  { background: rgba(255, 77, 79, 0.30); }
+    .stop:active { transform: scale(0.88); }
+    .stop svg { width: 9px; height: 9px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="pill">
+      <div class="dot" aria-hidden="true"></div>
+      <span class="timer" id="t">00:00</span>
+      <span class="lbl" aria-hidden="true">rec</span>
+      <button class="stop" id="stop" aria-label="Stop recording">
+        <svg viewBox="0 0 24 24" fill="none">
+          <rect x="6" y="6" width="12" height="12" rx="2" fill="white"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const timerEl = document.getElementById('t');
+    const start   = Date.now();
+    const iv = setInterval(() => {
+      const s = Math.floor((Date.now() - start) / 1000);
+      timerEl.textContent =
+        String(Math.floor(s / 60)).padStart(2, '0') + ':' +
+        String(s % 60).padStart(2, '0');
+    }, 1000);
+
+    document.getElementById('stop').addEventListener('click', () => {
+      ipcRenderer.send('recording:overlay-stop-clicked');
+    });
+
+    window.addEventListener('beforeunload', () => clearInterval(iv));
+  </script>
+</body>
+</html>
+

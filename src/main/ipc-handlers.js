@@ -85,39 +85,59 @@ function showCountdownOverlay(seconds = 3) {
     overlay.setAlwaysOnTop(true, "screen-saver");
     overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     overlay.setIgnoreMouseEvents(true);
+    overlay.setContentProtection(true);
 
     const html = `<!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8" />
-      <style>
-        body{margin:0;background:rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center;height:100vh;overflow:hidden;font-family:Inter,Segoe UI,Arial,sans-serif}
-        .stack{display:flex;flex-direction:column;align-items:center;gap:14px}
-        .circle{width:180px;height:180px;border-radius:999px;background:#101010;display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,0.18);box-shadow:0 14px 40px rgba(0,0,0,0.45)}
-        .n{font-size:88px;font-weight:700;color:#f5f5f5;line-height:1}
-        .label{font-size:14px;letter-spacing:.4px;color:#b3b3b3}
-      </style>
-    </head>
-    <body>
-      <div class="stack">
-        <div class="circle"><div id="n" class="n">${seconds}</div></div>
-        <div class="label">Recording starts now</div>
-      </div>
-      <script>
-        let remaining=${seconds};
-        const el=document.getElementById('n');
-        const interval=setInterval(()=>{
-          remaining-=1;
-          if(remaining<=0){
-            clearInterval(interval);
-            window.close();
-            return;
-          }
-          el.textContent=String(remaining);
-        },1000);
-      </script>
-    </body>
-    </html>`;
+<html><head><meta charset="UTF-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:rgba(0,0,0,0.52);
+    display:flex;align-items:center;justify-content:center;
+    height:100vh;overflow:hidden;
+    font-family:'JetBrains Mono','Fira Code','Cascadia Code','Courier New',monospace;
+  }
+  .box{
+    width:136px;height:136px;
+    background:rgba(9,9,11,0.95);
+    border:1px solid rgba(255,255,255,0.08);
+    border-radius:16px;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:6px;
+    box-shadow:0 24px 64px rgba(0,0,0,0.7),inset 0 1px 0 rgba(255,255,255,0.04);
+    animation:ei .15s ease;
+  }
+  @keyframes ei{from{opacity:0;transform:scale(.88)}to{opacity:1;transform:scale(1)}}
+  .n{
+    font-size:66px;font-weight:700;line-height:1;
+    color:#fff;letter-spacing:-3px;
+    animation:pop .4s cubic-bezier(.22,1,.36,1);
+  }
+  @keyframes pop{from{transform:scale(1.22);opacity:.5}to{transform:scale(1);opacity:1}}
+  .sub{
+    font-size:9px;font-weight:400;
+    color:rgba(255,255,255,0.25);
+    letter-spacing:.2em;text-transform:uppercase;
+  }
+</style>
+</head><body>
+  <div class="box">
+    <div class="n" id="n">${seconds}</div>
+    <div class="sub">starting</div>
+  </div>
+  <script>
+    let r=${seconds};
+    const el=document.getElementById('n');
+    const iv=setInterval(()=>{
+      r-=1;
+      if(r<=0){clearInterval(iv);window.close();return;}
+      el.style.animation='none';
+      void el.offsetHeight;
+      el.style.animation='pop .4s cubic-bezier(.22,1,.36,1)';
+      el.textContent=String(r);
+    },1000);
+  </script>
+</body></html>`;
 
     overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
     overlay.on("closed", () => resolve());
@@ -131,12 +151,35 @@ function closeRecordingOverlay() {
   recordingOverlay = null;
 }
 
-function showRecordingOverlay(mainWindow) {
+/**
+ * Convert an anchor name ("bottom-center", "top-right", …) into absolute
+ * screen coordinates for the overlay window.
+ */
+function resolveOverlayPosition(anchor, dBounds, W, H) {
+  const { x: dx, y: dy, width: dw, height: dh } = dBounds;
+  const MARGIN = 28;
+  const cx = Math.round(dx + (dw - W) / 2);
+  const positions = {
+    "bottom-center": { x: cx, y: dy + dh - H - MARGIN },
+    "bottom-left": { x: dx + MARGIN, y: dy + dh - H - MARGIN },
+    "bottom-right": { x: dx + dw - W - MARGIN, y: dy + dh - H - MARGIN },
+    "top-center": { x: cx, y: dy + MARGIN },
+    "top-left": { x: dx + MARGIN, y: dy + MARGIN },
+    "top-right": { x: dx + dw - W - MARGIN, y: dy + MARGIN },
+  };
+  return positions[anchor] || positions["bottom-center"];
+}
+
+function showRecordingOverlay(_mainWindow) {
   closeRecordingOverlay();
 
+  // Window is sized to the expanded pill; collapsed / hover state is pure CSS.
+  const W = 240;
+  const H = 44;
+
   recordingOverlay = new BrowserWindow({
-    width: 280,
-    height: 66,
+    width: W,
+    height: H,
     frame: false,
     resizable: false,
     minimizable: false,
@@ -154,63 +197,26 @@ function showRecordingOverlay(mainWindow) {
     },
   });
 
+  // Exclude the overlay from OS screen recordings (Windows / macOS).
+  recordingOverlay.setContentProtection(true);
   recordingOverlay.setAlwaysOnTop(true, "screen-saver");
   recordingOverlay.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
   });
 
-  const html = `<!DOCTYPE html>
-  <html>
-  <head>
-    <meta charset="UTF-8" />
-    <style>
-      *{box-sizing:border-box}
-      body{margin:0;padding:10px;background:transparent;font-family:Inter,Segoe UI,Arial,sans-serif}
-      .bar{height:46px;border-radius:12px;background:rgba(12,12,12,.95);border:1px solid rgba(255,255,255,.16);display:flex;align-items:center;gap:10px;padding:0 12px;-webkit-app-region:drag}
-      .dot{width:8px;height:8px;border-radius:50%;background:#ef4444;animation:pulse 1.6s ease-in-out infinite;flex:none}
-      .timer{font-weight:700;font-size:14px;letter-spacing:.4px;color:#f5f5f5;min-width:54px}
-      .label{font-size:12px;color:#b3b3b3;flex:1}
-      .stop{border:1px solid rgba(239,68,68,.55);background:rgba(239,68,68,.16);color:#fca5a5;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:600;cursor:pointer;-webkit-app-region:no-drag}
-      .stop:hover{background:rgba(239,68,68,.24)}
-      @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-    </style>
-  </head>
-  <body>
-    <div class="bar">
-      <span class="dot"></span>
-      <span id="timer" class="timer">00:00</span>
-      <span class="label">Recording</span>
-      <button class="stop" id="stop">Stop</button>
-    </div>
-    <script>
-      const { ipcRenderer } = require('electron');
-      const timerEl = document.getElementById('timer');
-      const stopBtn = document.getElementById('stop');
-      const start = Date.now();
-      const interval = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - start) / 1000);
-        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const secs = String(elapsed % 60).padStart(2, '0');
-        timerEl.textContent = mins + ':' + secs;
-      }, 1000);
-      stopBtn.addEventListener('click', () => ipcRenderer.send('recording:overlay-stop-clicked'));
-      window.addEventListener('beforeunload', () => clearInterval(interval));
-    </script>
-  </body>
-  </html>`;
+  // Pill is always visible — no ignore-mouse tricks needed.
+  recordingOverlay.setIgnoreMouseEvents(false);
 
-  recordingOverlay.loadURL(
-    `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
-  );
+  // Load the overlay from its own HTML file — keeps ipc-handlers clean.
+  recordingOverlay.loadFile(path.join(__dirname, "recording-overlay.html"));
   recordingOverlay.on("closed", () => {
     recordingOverlay = null;
   });
 
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    const [mainX, mainY] = mainWindow.getPosition();
-    const [mainWidth] = mainWindow.getSize();
-    recordingOverlay.setPosition(mainX + mainWidth - 320, mainY + 60, false);
-  }
+  const anchor = (settings && settings.overlayPosition) || "bottom-center";
+  const d = screen.getPrimaryDisplay().bounds;
+  const pos = resolveOverlayPosition(anchor, d, W, H);
+  recordingOverlay.setPosition(pos.x, pos.y, false);
 }
 
 /**
@@ -346,6 +352,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
   // ─── Settings ──────────────────────────────────────────────────────
 
   ipcMain.handle(IPC.GET_SETTINGS, async () => {
+    console.log("[IPC] Settings requested:", settings);
     return { ...settings };
   });
 
@@ -395,7 +402,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
       }
       return false;
     } catch (err) {
-      console.error('[IPC] Failed to open settings file:', err);
+      console.error("[IPC] Failed to open settings file:", err);
       throw err;
     }
   });
