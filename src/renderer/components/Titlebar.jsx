@@ -24,7 +24,6 @@ export function Titlebar({ currentPage, onNavigate }) {
             }
             title="Settings"
           >
-            <Settings size={14} />
             <span>Settings</span>
           </button>
         </div>
