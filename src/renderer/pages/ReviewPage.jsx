@@ -22,14 +22,14 @@ const api = window.electronAPI;
 
 const BG_PRESETS = [
   { name: "Graphite", type: "gradient", start: "#1a1a1a", end: "#0f0f0f" },
-  { name: "Steel",    type: "gradient", start: "#2a2a2a", end: "#111111" },
+  { name: "Steel", type: "gradient", start: "#2a2a2a", end: "#111111" },
   { name: "Charcoal", type: "gradient", start: "#232323", end: "#161616" },
-  { name: "Slate",    type: "solid",    color: "#1e293b" },
-  { name: "Zinc",     type: "solid",    color: "#18181b" },
-  { name: "Ash",      type: "solid",    color: "#2a2a2a" },
-  { name: "Stone",    type: "solid",    color: "#3a3a3a" },
-  { name: "Cloud",    type: "solid",    color: "#d4d4d4" },
-  { name: "White",    type: "solid",    color: "#f8fafc" },
+  { name: "Slate", type: "solid", color: "#1e293b" },
+  { name: "Zinc", type: "solid", color: "#18181b" },
+  { name: "Ash", type: "solid", color: "#2a2a2a" },
+  { name: "Stone", type: "solid", color: "#3a3a3a" },
+  { name: "Cloud", type: "solid", color: "#d4d4d4" },
+  { name: "White", type: "solid", color: "#f8fafc" },
 ];
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
@@ -225,23 +225,23 @@ function VideoTrimmer({
         <div className="trimmer-thumbs">
           {thumbsLoaded && thumbnails.length > 0
             ? thumbnails.map((src, i) =>
-                src ? (
-                  <img
-                    key={i}
-                    src={src}
-                    className="trimmer-thumb"
-                    draggable={false}
-                    alt=""
-                  />
-                ) : (
-                  <div key={i} className="trimmer-thumb trimmer-thumb--empty" />
-                ),
-              )
+              src ? (
+                <img
+                  key={i}
+                  src={src}
+                  className="trimmer-thumb"
+                  draggable={false}
+                  alt=""
+                />
+              ) : (
+                <div key={i} className="trimmer-thumb trimmer-thumb--empty" />
+              ),
+            )
             : !thumbsLoaded && (
-                <div className="trimmer-thumbs-loading">
-                  <div className="trimmer-thumbs-shimmer" />
-                </div>
-              )}
+              <div className="trimmer-thumbs-loading">
+                <div className="trimmer-thumbs-shimmer" />
+              </div>
+            )}
         </div>
 
         {/* Dimmed regions outside selection */}
@@ -500,7 +500,7 @@ export function ReviewPage({ data, onNavigate }) {
     if (data?.sessionDir) {
       try {
         await api.deleteRecording(data.sessionDir);
-      } catch {}
+      } catch { }
     }
     onNavigate("home");
   };
@@ -581,9 +581,9 @@ export function ReviewPage({ data, onNavigate }) {
             <div
               className="rv-preview-canvas"
               style={{
-                background: previewBg,
+                background: bgEnabled ? previewBg : "transparent",
                 padding: bgEnabled
-                  ? `${Math.max(8, Math.round(padding / 6))}px`
+                  ? `${Math.round(padding / 4)}px`
                   : 0,
               }}
             >
@@ -591,9 +591,7 @@ export function ReviewPage({ data, onNavigate }) {
                 ref={videoRef}
                 className="rv-video"
                 style={{
-                  borderRadius: bgEnabled
-                    ? `${cornerRadius}px`
-                    : "var(--radius-md)",
+                  borderRadius: bgEnabled ? `${cornerRadius}px` : 0,
                 }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
@@ -620,17 +618,15 @@ export function ReviewPage({ data, onNavigate }) {
           )}
         </div>
 
-        {/* Right sidebar */}
+        {/* Right sidebar — unified panel */}
         <div className="rv-sidebar">
-          {/* ── Trim info card ──────────────────────────────────── */}
-          <div className="rv-card">
-            <div className="rv-card-header">
-              <div className="rv-card-icon-wrap rv-card-icon--cyan">
-                <Scissors size={11} />
-              </div>
+          <div className="rv-panel">
+            {/* ── Trim section ──────────────────────────────────── */}
+            <div className="rv-section-header">
+              <Scissors size={9} />
               <span>Trim</span>
             </div>
-            <div className="rv-card-body">
+            <div className="rv-section-body">
               <div className="rv-stat-row">
                 <span className="rv-stat-label">Start</span>
                 <span className="rv-stat-value">{formatTime(trimStart)}</span>
@@ -639,29 +635,23 @@ export function ReviewPage({ data, onNavigate }) {
                 <span className="rv-stat-label">End</span>
                 <span className="rv-stat-value">{formatTime(trimEnd)}</span>
               </div>
-              <div className="rv-stat-divider" />
               <div className="rv-stat-row rv-stat-row--highlight">
-                <span className="rv-stat-label">Clip Duration</span>
+                <span className="rv-stat-label">Duration</span>
                 <span className="rv-stat-value rv-stat-value--accent">
                   {formatTime(trimEnd - trimStart)}
                 </span>
               </div>
             </div>
-          </div>
 
-          {/* ── Effects card ────────────────────────────────────── */}
-          <div className="rv-card">
-            <div className="rv-card-header">
-              <div className="rv-card-icon-wrap rv-card-icon--purple">
-                <Sparkles size={11} />
-              </div>
+            {/* ── Effects section ───────────────────────────────── */}
+            <div className="rv-section-header">
+              <Sparkles size={9} />
               <span>Effects</span>
             </div>
-            <div className="rv-card-body">
-              {/* Auto-Zoom toggle */}
+            <div className="rv-section-body">
               <div className="rv-option-row">
                 <div className="rv-option-info">
-                  <Film size={13} className="rv-option-icon" />
+                  <Film size={12} className="rv-option-icon" />
                   <div className="rv-option-text">
                     <span className="rv-option-name">Auto-Zoom</span>
                     <span className="rv-option-desc">Follow cursor clicks</span>
@@ -676,14 +666,12 @@ export function ReviewPage({ data, onNavigate }) {
                   <span className="rv-toggle-track" />
                 </label>
               </div>
-
-              {/* Background toggle */}
               <div className="rv-option-row">
                 <div className="rv-option-info">
-                  <Layers size={13} className="rv-option-icon" />
+                  <Layers size={12} className="rv-option-icon" />
                   <div className="rv-option-text">
                     <span className="rv-option-name">Background</span>
-                    <span className="rv-option-desc">Rounded + padded</span>
+                    <span className="rv-option-desc">Padded + styled</span>
                   </div>
                 </div>
                 <label className="rv-toggle">
@@ -696,74 +684,67 @@ export function ReviewPage({ data, onNavigate }) {
                 </label>
               </div>
             </div>
+
+            {/* ── Background section (conditional) ──────────────── */}
+            {bgEnabled && (
+              <>
+                <div className="rv-section-header">
+                  <Layers size={9} />
+                  <span>Background</span>
+                </div>
+                <div className="rv-section-body">
+                  <div className="rv-field">
+                    <span className="rv-field-label">Color</span>
+                    <div className="rv-swatches">
+                      {BG_PRESETS.map((p, i) => {
+                        const bg =
+                          p.type === "gradient"
+                            ? `linear-gradient(135deg, ${p.start}, ${p.end})`
+                            : p.color;
+                        return (
+                          <button
+                            key={i}
+                            className={`rv-swatch ${i === presetIdx ? "active" : ""}`}
+                            style={{ background: bg }}
+                            title={p.name}
+                            onClick={() => setPresetIdx(i)}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <div className="rv-field">
+                    <div className="rv-field-header">
+                      <span className="rv-field-label">Radius</span>
+                      <span className="rv-field-value">{cornerRadius}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={32}
+                      value={cornerRadius}
+                      onChange={(e) => setCornerRadius(Number(e.target.value))}
+                      className="rv-slider"
+                    />
+                  </div>
+                  <div className="rv-field">
+                    <div className="rv-field-header">
+                      <span className="rv-field-label">Padding</span>
+                      <span className="rv-field-value">{padding}px</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={16}
+                      max={120}
+                      value={padding}
+                      onChange={(e) => setPadding(Number(e.target.value))}
+                      className="rv-slider"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-
-          {/* ── Background settings card (conditional) ──────────── */}
-          {bgEnabled && (
-            <div className="rv-card rv-card--glow">
-              <div className="rv-card-header">
-                <div className="rv-card-icon-wrap rv-card-icon--blue">
-                  <Layers size={11} />
-                </div>
-                <span>Background</span>
-              </div>
-              <div className="rv-card-body">
-                {/* Color presets */}
-                <div className="rv-field">
-                  <span className="rv-field-label">Color</span>
-                  <div className="rv-swatches">
-                    {BG_PRESETS.map((p, i) => {
-                      const bg =
-                        p.type === "gradient"
-                          ? `linear-gradient(135deg, ${p.start}, ${p.end})`
-                          : p.color;
-                      return (
-                        <button
-                          key={i}
-                          className={`rv-swatch ${i === presetIdx ? "active" : ""}`}
-                          style={{ background: bg }}
-                          title={p.name}
-                          onClick={() => setPresetIdx(i)}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Corner radius */}
-                <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Radius</span>
-                    <span className="rv-field-value">{cornerRadius}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={32}
-                    value={cornerRadius}
-                    onChange={(e) => setCornerRadius(Number(e.target.value))}
-                    className="rv-slider"
-                  />
-                </div>
-
-                {/* Padding */}
-                <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Padding</span>
-                    <span className="rv-field-value">{padding}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={16}
-                    max={120}
-                    value={padding}
-                    onChange={(e) => setPadding(Number(e.target.value))}
-                    className="rv-slider"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
 

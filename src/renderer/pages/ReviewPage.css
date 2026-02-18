@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   ReviewPage — export screen with video trimmer + professional sidebar
+   ReviewPage — flat, square, developer-focused
    ═══════════════════════════════════════════════════════════════════ */
 
 .review-page {
@@ -15,21 +15,23 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px 8px;
+  padding: 10px 16px 8px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .rv-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
 }
 
 .rv-header h2 {
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .rv-header-badges {
@@ -41,9 +43,9 @@
 .rv-badge {
   font-size: 10px;
   font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 10px;
+  padding: 1px 6px;
   letter-spacing: 0.04em;
+  font-family: var(--font-mono);
 }
 
 .rv-badge--muted {
@@ -63,9 +65,8 @@
 .rv-body {
   flex: 1;
   overflow: hidden;
-  padding: 0 20px 8px;
   display: flex;
-  gap: 16px;
+  gap: 0;
   min-height: 0;
 }
 
@@ -75,7 +76,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  border-right: 1px solid var(--border);
 }
 
 /* ─── Video Preview ──────────────────────────────────────────────── */
@@ -86,29 +87,34 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  background: var(--bg-primary);
+  overflow: hidden;
 }
 
 .rv-preview-canvas {
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  transition: background 0.3s ease, padding 0.3s ease;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 0.2s ease, padding 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Fill the wrap so background color shows around the video */
   width: 100%;
-  max-height: 100%;
+  height: 100%;
 }
 
 .rv-video {
   display: block;
-  width: 100%;
-  height: 100%;
-  max-height: 360px;
+  /* Constrain video inside the canvas (which may have padding) */
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
   object-fit: contain;
   background: #000;
   outline: none;
-  transition: border-radius 0.25s ease;
+  /* Prevent video from overflowing when canvas has padding */
+  flex-shrink: 1;
+  min-width: 0;
+  min-height: 0;
 }
 
 .rv-video:focus {
@@ -123,7 +129,8 @@
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
+  border-top: 1px solid var(--border);
 }
 
 /* ── Time badges above the track ─────────────────────────────────── */
@@ -132,6 +139,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
 }
 
 .trimmer-badge {
@@ -140,40 +150,28 @@
   gap: 4px;
   font-size: 10px;
   font-weight: 500;
-  padding: 2px 8px;
-  border-radius: 8px;
+  font-family: var(--font-mono);
+  color: var(--text-tertiary);
   letter-spacing: 0.02em;
 }
 
-.trimmer-badge--start {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
 
 .trimmer-badge--clip {
-  background: var(--bg-tertiary);
   color: var(--text-secondary);
-  border: 1px solid var(--border);
 }
 
-.trimmer-badge--end {
-  background: var(--bg-tertiary);
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-}
 
 /* ── Timeline track ──────────────────────────────────────────────── */
 
 .trimmer-track {
   position: relative;
-  height: 52px;
-  border-radius: 8px;
-  overflow: hidden;
+  height: 48px;
   background: var(--bg-tertiary);
   cursor: pointer;
   user-select: none;
-  border: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  /* Inset so handles at 0%/100% don't clip outside the visible area */
+  margin: 0 8px;
 }
 
 /* Thumbnail strip */
@@ -188,8 +186,7 @@
   flex: 1;
   min-width: 0;
   object-fit: cover;
-  opacity: 0.7;
-  transition: opacity 0.3s ease;
+  opacity: 0.65;
 }
 
 .trimmer-thumb--empty {
@@ -211,13 +208,11 @@
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgba(255, 255, 255, 0.03),
-    transparent
-  );
-  animation: trimmer-shimmer 2s ease infinite;
+  background: linear-gradient(90deg,
+      transparent,
+      rgba(255, 255, 255, 0.04),
+      transparent);
+  animation: trimmer-shimmer 1.8s ease infinite;
 }
 
 @keyframes trimmer-shimmer {
@@ -231,20 +226,20 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.55);
   z-index: 4;
   pointer-events: none;
-  transition: width 0.05s linear;
+  transition: width 0.04s linear;
 }
 
 .trimmer-dim--left {
   left: 0;
-  border-right: 1px solid var(--border);
+  border-right: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 .trimmer-dim--right {
   right: 0;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
 }
 
 /* Selection highlight (top & bottom border) */
@@ -256,7 +251,6 @@
   border-bottom: 2px solid var(--text-primary);
   pointer-events: none;
   z-index: 5;
-  box-shadow: none;
 }
 
 /* ── Trim handles ────────────────────────────────────────────────── */
@@ -265,33 +259,28 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 14px;
+  width: 12px;
   z-index: 10;
   cursor: ew-resize;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.12s ease;
+  transition: background 0.1s ease;
 }
 
 .trimmer-handle--start {
-  transform: translateX(-100%);
+  transform: translateX(-50%);
   background: var(--text-primary);
-  border-radius: 6px 0 0 6px;
 }
 
 .trimmer-handle--end {
+  transform: translateX(-50%);
   background: var(--text-primary);
-  border-radius: 0 6px 6px 0;
 }
 
 .trimmer-handle:hover,
 .trimmer-handle.active {
   background: var(--text-secondary);
-}
-
-.trimmer-handle.active {
-  box-shadow: none;
 }
 
 /* Grip lines inside handle */
@@ -301,23 +290,22 @@
 }
 
 .trimmer-handle-bar span {
-  width: 2px;
-  height: 16px;
-  background: rgba(255, 255, 255, 0.75);
-  border-radius: 1px;
+  width: 1px;
+  height: 14px;
+  background: rgba(0, 0, 0, 0.5);
 }
 
 /* ── Playhead ────────────────────────────────────────────────────── */
 
 .trimmer-playhead {
   position: absolute;
-  top: -2px;
+  top: -3px;
   bottom: 0;
   z-index: 15;
   cursor: grab;
   transform: translateX(-50%);
   pointer-events: auto;
-  width: 16px;
+  width: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -328,22 +316,20 @@
 }
 
 .trimmer-playhead-head {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   background: var(--text-primary);
-  border-radius: 2px;
   transform: rotate(45deg);
-  margin-top: -2px;
-  box-shadow: none;
+  margin-top: 0;
   flex-shrink: 0;
 }
 
 .trimmer-playhead-line {
-  width: 2px;
+  width: 1px;
   flex: 1;
   background: var(--text-primary);
-  box-shadow: none;
-  margin-top: -3px;
+  margin-top: -2px;
+  opacity: 0.8;
 }
 
 /* ── Playback controls ───────────────────────────────────────────── */
@@ -351,32 +337,34 @@
 .trimmer-controls {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 2px 0;
+  justify-content: center;
+  padding: 6px 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  position: relative;
 }
 
 .trimmer-controls-left {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
 }
 
 .trimmer-ctrl-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: var(--radius-sm);
+  width: 26px;
+  height: 26px;
   background: none;
   border: 1px solid transparent;
   color: var(--text-tertiary);
   cursor: pointer;
-  transition: all 0.12s ease;
+  transition: all 0.1s ease;
 }
 
 .trimmer-ctrl-btn:hover {
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
   border-color: var(--border);
 }
@@ -385,28 +373,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
+  width: 30px;
+  height: 30px;
+  background: var(--text-primary);
+  border: none;
+  color: var(--bg-primary);
   cursor: pointer;
-  transition: all 0.15s ease;
-  box-shadow: none;
+  transition: opacity 0.1s ease;
 }
 
 .trimmer-play-btn:hover {
-  transform: none;
-  border-color: var(--border-hover);
-  background: var(--bg-tertiary);
+  opacity: 0.85;
 }
 
 .trimmer-play-btn:active {
-  transform: none;
+  opacity: 0.7;
 }
 
 .trimmer-controls-right {
+  position: absolute;
+  right: 10px;
   display: flex;
   align-items: center;
   gap: 4px;
@@ -414,7 +400,7 @@
 }
 
 .trimmer-time-current {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -430,111 +416,73 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   Right Sidebar — professional settings cards
+   Right Sidebar — unified single panel
    ═══════════════════════════════════════════════════════════════════ */
 
 .rv-sidebar {
-  width: 260px;
+  width: 220px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
   overflow-y: auto;
-  padding-bottom: 8px;
-}
-
-/* ── Card ─────────────────────────────────────────────────────────── */
-
-.rv-card {
   background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  animation: rv-card-in 0.25s ease;
 }
 
-.rv-card--glow {
-  border-color: var(--border);
-  box-shadow: none;
+/* ── Unified sidebar panel ────────────────────────────────────────── */
+
+.rv-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
 }
 
-@keyframes rv-card-in {
-  from {
-    opacity: 0;
-    transform: translateY(-6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.rv-card-header {
+/* Section header row */
+.rv-section-header {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 9px 12px;
-  font-size: 10px;
-  font-weight: 600;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 9px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: var(--text-secondary);
+  letter-spacing: 0.12em;
+  color: var(--text-muted);
   background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border);
+  user-select: none;
+}
+
+/* Section body */
+.rv-section-body {
+  display: flex;
+  flex-direction: column;
   border-bottom: 1px solid var(--border);
 }
 
-.rv-card-icon-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 5px;
-  flex-shrink: 0;
-}
-
-.rv-card-icon--cyan {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.rv-card-icon--purple {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.rv-card-icon--blue {
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-}
-
-.rv-card-body {
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-/* ── Stat rows (Trim card) ───────────────────────────────────────── */
+/* ── Stat rows (Trim) ────────────────────────────────────────────── */
 
 .rv-stat-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 0;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rv-stat-row:last-child {
+  border-bottom: none;
 }
 
 .rv-stat-row--highlight {
-  padding: 6px 8px;
   background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
 }
 
 .rv-stat-label {
-  font-size: 11px;
-  color: var(--text-tertiary);
+  font-size: 10px;
+  color: var(--text-muted);
   font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .rv-stat-value {
@@ -546,37 +494,36 @@
 
 .rv-stat-value--accent {
   color: var(--text-primary);
-  text-shadow: none;
 }
 
 .rv-stat-divider {
   height: 1px;
   background: var(--border);
-  margin: 2px 0;
 }
 
-/* ── Option rows (Effects card) ──────────────────────────────────── */
+/* ── Option rows (Effects) ───────────────────────────────────────── */
 
 .rv-option-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid transparent;
-  transition: all 0.15s ease;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s ease;
+}
+
+.rv-option-row:last-child {
+  border-bottom: none;
 }
 
 .rv-option-row:hover {
-  background: rgba(255, 255, 255, 0.04);
-  border-color: var(--border);
+  background: var(--bg-tertiary);
 }
 
 .rv-option-info {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
 }
 
 .rv-option-icon {
@@ -591,7 +538,7 @@
 }
 
 .rv-option-name {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-primary);
 }
@@ -619,13 +566,12 @@
 
 .rv-toggle-track {
   display: block;
-  width: 34px;
-  height: 18px;
-  border-radius: 9px;
-  background: var(--bg-tertiary);
+  width: 30px;
+  height: 16px;
+  background: var(--bg-primary);
   border: 1px solid var(--border);
   position: relative;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
 }
 
 .rv-toggle-track::after {
@@ -633,39 +579,42 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: var(--text-tertiary);
-  transition: all 0.25s ease;
+  width: 10px;
+  height: 10px;
+  background: var(--text-muted);
+  transition: all 0.2s ease;
 }
 
-.rv-toggle input:checked + .rv-toggle-track {
+.rv-toggle input:checked+.rv-toggle-track {
   background: var(--text-secondary);
   border-color: var(--text-secondary);
-  box-shadow: none;
 }
 
-.rv-toggle input:checked + .rv-toggle-track::after {
-  transform: translateX(16px);
-  background: white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+.rv-toggle input:checked+.rv-toggle-track::after {
+  transform: translateX(14px);
+  background: var(--bg-primary);
 }
 
-/* ── Field rows (Background card) ────────────────────────────────── */
+/* ── Field rows (Background) ─────────────────────────────────────── */
 
 .rv-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rv-field:last-child {
+  border-bottom: none;
 }
 
 .rv-field-label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-tertiary);
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.1em;
 }
 
 .rv-field-header {
@@ -679,38 +628,33 @@
   font-weight: 600;
   color: var(--text-secondary);
   font-family: var(--font-mono);
-  background: var(--bg-tertiary);
-  padding: 1px 6px;
-  border-radius: 4px;
 }
 
 /* Color swatches */
 .rv-swatches {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   flex-wrap: wrap;
 }
 
 .rv-swatch {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  border: 2px solid transparent;
+  width: 20px;
+  height: 20px;
+  border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.1s ease;
   padding: 0;
   outline: none;
 }
 
 .rv-swatch:hover {
-  transform: scale(1.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  border-color: var(--text-muted);
 }
 
 .rv-swatch.active {
   border-color: var(--text-primary);
-  box-shadow: 0 0 0 1px var(--bg-primary);
-  transform: scale(1.1);
+  outline: 1px solid var(--text-primary);
+  outline-offset: 1px;
 }
 
 /* Range sliders */
@@ -718,49 +662,42 @@
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 4px;
-  background: var(--bg-tertiary);
-  border-radius: 2px;
+  height: 2px;
+  background: var(--border);
   outline: none;
-  transition: background 0.2s ease;
 }
 
 .rv-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+  width: 12px;
+  height: 12px;
   background: var(--text-primary);
   cursor: pointer;
-  border: 2px solid var(--bg-primary);
-  box-shadow: none;
-  transition: all 0.12s ease;
+  border: none;
+  transition: opacity 0.1s ease;
 }
 
 .rv-slider::-webkit-slider-thumb:hover {
-  transform: scale(1.1);
-  box-shadow: none;
+  opacity: 0.8;
 }
 
 /* ─── Progress ───────────────────────────────────────────────────── */
 
 .rv-progress {
-  padding: 10px 20px 0;
+  padding: 8px 16px 0;
   flex-shrink: 0;
 }
 
 .rv-progress-bar {
   width: 100%;
-  height: 4px;
+  height: 2px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
   overflow: hidden;
 }
 
 .rv-progress-fill {
   height: 100%;
-  border-radius: 2px;
   background: var(--text-primary);
   transition: width 0.3s ease;
   position: relative;
@@ -770,32 +707,22 @@
   display: none;
 }
 
-@keyframes rv-glow-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
 .rv-progress-label {
   display: block;
   text-align: center;
   font-size: 10px;
   color: var(--text-tertiary);
-  margin-top: 6px;
+  margin-top: 5px;
+  font-family: var(--font-mono);
 }
 
 /* ─── Error ──────────────────────────────────────────────────────── */
 
 .rv-error {
-  margin: 8px 20px 0;
-  padding: 8px 12px;
+  margin: 6px 16px 0;
+  padding: 6px 10px;
   background: var(--danger-muted);
   border: 1px solid rgba(239, 68, 68, 0.2);
-  border-radius: var(--radius-sm);
   color: var(--danger);
   font-size: 11px;
   flex-shrink: 0;
@@ -804,9 +731,9 @@
 /* ─── Actions ────────────────────────────────────────────────────── */
 
 .rv-actions {
-  padding: 12px 20px 16px;
+  padding: 10px 16px;
   display: flex;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
   flex-shrink: 0;
   border-top: 1px solid var(--border);
@@ -818,34 +745,29 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 18px;
-  border-radius: var(--radius-md);
-  font-size: 12px;
+  padding: 7px 16px;
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-mono);
   cursor: pointer;
   border: none;
-  transition: all 0.15s ease;
+  transition: opacity 0.1s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
 .rv-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
 .rv-btn--primary {
   background: var(--text-primary);
   color: var(--bg-primary);
-  box-shadow: none;
 }
 
 .rv-btn--primary:hover:not(:disabled) {
-  transform: none;
-  opacity: 0.88;
-}
-
-.rv-btn--primary:active:not(:disabled) {
-  transform: translateY(0);
+  opacity: 0.85;
 }
 
 .rv-btn--secondary {
@@ -895,7 +817,6 @@
 
 .review-loading-spinner {
   color: var(--text-primary);
-  filter: none;
 }
 
 .review-loading p {
