@@ -230,6 +230,57 @@ function remuxToCleanMp4(
   });
 }
 
+/**
+ * Trim a clean MP4 to a specific time range with frame-accurate cuts.
+ *
+ * @param {string}   inputPath   Path to the source MP4
+ * @param {string}   outputPath  Path for the trimmed MP4
+ * @param {number}   startTime   Start time in seconds
+ * @param {number}   endTime     End time in seconds
+ * @param {function} [onProgress] Optional progress callback
+ * @returns {Promise<string>} outputPath
+ */
+function trimVideo(
+  inputPath,
+  outputPath,
+  startTime,
+  endTime,
+  onProgress = null,
+) {
+  const duration = endTime - startTime;
+  console.log(
+    `[FFmpeg] Trimming ${startTime.toFixed(2)}s → ${endTime.toFixed(2)}s (${duration.toFixed(2)}s)`,
+  );
+
+  const args = [
+    "-i",
+    inputPath,
+    "-ss",
+    String(startTime),
+    "-to",
+    String(endTime),
+    "-c:v",
+    "libx264",
+    "-preset",
+    "ultrafast",
+    "-crf",
+    "14",
+    "-pix_fmt",
+    "yuv420p",
+    "-an",
+    "-movflags",
+    "+faststart",
+    "-y",
+    outputPath,
+  ];
+
+  const { promise } = spawnFfmpeg(args, onProgress, duration);
+  return promise.then(() => {
+    console.log(`[FFmpeg] Trimmed video ready: ${outputPath}`);
+    return outputPath;
+  });
+}
+
 /* ─── Hex-to-RGB helper ────────────────────────────────────────────── */
 
 function hexToRgb(hex) {
@@ -319,7 +370,8 @@ async function applyVisualExport(
     filterComplex = `[1:v][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`;
   }
 
-  const frameCount = Number.isFinite(nbFrames) && nbFrames > 0 ? Math.round(nbFrames) : 0;
+  const frameCount =
+    Number.isFinite(nbFrames) && nbFrames > 0 ? Math.round(nbFrames) : 0;
 
   const args = [
     "-i",
@@ -409,5 +461,6 @@ module.exports = {
   spawnFfmpeg,
   remuxToCleanMp4,
   applyVisualExport,
+  trimVideo,
   hexToRgb,
 };

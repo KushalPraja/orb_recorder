@@ -46,6 +46,7 @@ const CLOSE_CLICK_THRESHOLD = 2.0; // seconds — merge nearby clicks into pan
 const RAW_RECORDING_FILE = "recording.webm";
 const EVENTS_FILE = "events.json";
 const OUTPUT_FILE = "output.mp4";
+const CLEAN_MP4_FILE = "preview.mp4";
 const SETTINGS_FILE = "settings.json";
 
 // ─── IPC channel names ────────────────────────────────────────────────────────
@@ -70,6 +71,7 @@ const IPC = {
   GET_SOURCES: "sources:list",
 
   // Post-processing
+  REMUX_VIDEO: "video:remux",
   PROCESS_VIDEO: "video:process",
   PROCESSING_PROGRESS: "video:progress",
   PROCESSING_DONE: "video:done",
@@ -109,6 +111,7 @@ module.exports = {
   RAW_RECORDING_FILE,
   EVENTS_FILE,
   OUTPUT_FILE,
+  CLEAN_MP4_FILE,
   SETTINGS_FILE,
 
   // IPC

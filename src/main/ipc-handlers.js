@@ -13,12 +13,14 @@ const fs = require("fs");
 const path = require("path");
 const inputTracker = require("./input-tracker");
 const { processVideo } = require("./post-processor");
+const { remuxToCleanMp4 } = require("./ffmpeg-utils");
 const {
   IPC,
   DEFAULT_SETTINGS,
   RAW_RECORDING_FILE,
   EVENTS_FILE,
   OUTPUT_FILE,
+  CLEAN_MP4_FILE,
   SETTINGS_FILE,
 } = require("../shared/constants");
 
@@ -321,6 +323,25 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
 
   // ─── Post-Processing ──────────────────────────────────────────────
 
+  ipcMain.handle(IPC.REMUX_VIDEO, async (_event, sessionDir) => {
+    const rawPath = path.join(sessionDir, RAW_RECORDING_FILE);
+    const cleanPath = path.join(sessionDir, CLEAN_MP4_FILE);
+
+    // Return cached file if already remuxed
+    if (fs.existsSync(cleanPath)) {
+      console.log(`[IPC] Reusing cached preview: ${cleanPath}`);
+      return cleanPath;
+    }
+
+    if (!fs.existsSync(rawPath)) {
+      throw new Error(`Recording not found: ${rawPath}`);
+    }
+
+    console.log(`[IPC] Remuxing for preview: ${rawPath} → ${cleanPath}`);
+    await remuxToCleanMp4(rawPath, cleanPath, null, settings.fps);
+    return cleanPath;
+  });
+
   ipcMain.handle(IPC.PROCESS_VIDEO, async (_event, opts = {}) => {
     const sessionDir =
       opts.sessionDir || (recordingSession && recordingSession.sessionDir);
@@ -346,6 +367,10 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
         backgroundColor: opts.backgroundColor ?? "#6366f1",
         gradientStart: opts.gradientStart ?? "#667eea",
         gradientEnd: opts.gradientEnd ?? "#764ba2",
+
+        // Trim — optional time range
+        trimStart: opts.trimStart,
+        trimEnd: opts.trimEnd,
 
         onProgress: (progress) => {
           mainWindow.webContents.send(IPC.PROCESSING_PROGRESS, progress);

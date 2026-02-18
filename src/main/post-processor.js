@@ -13,6 +13,7 @@ const path = require("path");
 const {
   EVENTS_FILE,
   RAW_RECORDING_FILE,
+  CLEAN_MP4_FILE,
   OUTPUT_FILE,
   DEFAULT_SETTINGS,
 } = require("../shared/constants");
@@ -20,6 +21,7 @@ const {
   getFfmpegPath,
   remuxToCleanMp4,
   applyVisualExport,
+  trimVideo,
 } = require("./ffmpeg-utils");
 
 /* ─── Resolve binaries ─────────────────────────────────────────────── */
@@ -182,6 +184,10 @@ async function processVideo(opts) {
     backgroundColor = "#6366f1",
     gradientStart = "#667eea",
     gradientEnd = "#764ba2",
+
+    // Trim
+    trimStart,
+    trimEnd,
   } = opts;
 
   const inputPath = path.join(recordingDir, RAW_RECORDING_FILE);
@@ -194,32 +200,72 @@ async function processVideo(opts) {
 
   const targetFps = Number(fps) || DEFAULT_SETTINGS.fps;
 
-  // ── Phase 1: Remux WebM → clean CFR MP4 (0-40%) ──────────────────
+  // ── Phase 1: Get a clean CFR MP4 (0-30%) ──────────────────────────
+  // If review-page already remuxed a preview.mp4, reuse it to skip work.
+  const previewPath = path.join(recordingDir, CLEAN_MP4_FILE);
   const cleanPath = path.join(recordingDir, "__intermediate_clean.mp4");
-  if (onProgress) onProgress({ percent: 0, phase: "Normalizing recording…" });
+  const intermediates = [];
 
-  console.log(`[PostProcessor] Remuxing → ${cleanPath}`);
-  try {
-    await remuxToCleanMp4(
-      inputPath,
-      cleanPath,
-      (p) => {
-        if (onProgress && Number.isFinite(p.percent)) {
-          onProgress({
-            percent: Math.min(40, Math.round(p.percent * 0.4)),
-            phase: "Normalizing recording…",
-          });
-        }
-      },
-      targetFps,
-    );
-  } catch (err) {
-    safeUnlink(cleanPath);
-    throw err;
+  if (fs.existsSync(previewPath)) {
+    console.log(`[PostProcessor] Reusing cached preview → ${previewPath}`);
+    if (onProgress) onProgress({ percent: 30, phase: "Using cached preview…" });
+    // Don't add previewPath to intermediates — we want to keep it
+  } else {
+    if (onProgress) onProgress({ percent: 0, phase: "Normalizing recording…" });
+    console.log(`[PostProcessor] Remuxing → ${cleanPath}`);
+    intermediates.push(cleanPath);
+    try {
+      await remuxToCleanMp4(
+        inputPath,
+        cleanPath,
+        (p) => {
+          if (onProgress && Number.isFinite(p.percent)) {
+            onProgress({
+              percent: Math.min(30, Math.round(p.percent * 0.3)),
+              phase: "Normalizing recording…",
+            });
+          }
+        },
+        targetFps,
+      );
+    } catch (err) {
+      intermediates.forEach(safeUnlink);
+      throw err;
+    }
   }
 
-  let currentInput = cleanPath;
-  const intermediates = [cleanPath];
+  let currentInput = fs.existsSync(previewPath) ? previewPath : cleanPath;
+
+  // ── Phase 1.5: Trim (optional, 30-40%) ────────────────────────────
+  const isTrimmed =
+    Number.isFinite(trimStart) &&
+    Number.isFinite(trimEnd) &&
+    trimStart < trimEnd &&
+    (trimStart > 0.1 || trimEnd < Infinity);
+
+  if (isTrimmed) {
+    const trimmedPath = path.join(recordingDir, "__intermediate_trimmed.mp4");
+    intermediates.push(trimmedPath);
+    if (onProgress) onProgress({ percent: 30, phase: "Trimming…" });
+    console.log(
+      `[PostProcessor] Trimming ${trimStart.toFixed(2)}s → ${trimEnd.toFixed(2)}s`,
+    );
+
+    try {
+      await trimVideo(currentInput, trimmedPath, trimStart, trimEnd, (p) => {
+        if (onProgress && Number.isFinite(p.percent)) {
+          onProgress({
+            percent: Math.min(40, 30 + Math.round(p.percent * 0.1)),
+            phase: "Trimming…",
+          });
+        }
+      });
+      currentInput = trimmedPath;
+    } catch (err) {
+      intermediates.forEach(safeUnlink);
+      throw err;
+    }
+  }
 
   // ── Phase 2: Auto-zoom (optional, 40-70%) ─────────────────────────
   if (autoZoom) {

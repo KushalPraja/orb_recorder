@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),
 
   // ─── Post-processing ──────────────────────────────────────────────
+  remuxVideo: (sessionDir) => ipcRenderer.invoke(IPC.REMUX_VIDEO, sessionDir),
   processVideo: (opts) => ipcRenderer.invoke(IPC.PROCESS_VIDEO, opts),
   onProgress: (callback) => {
     const handler = (_event, data) => callback(data);
@@ -57,4 +58,3 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openOutput: (filePath) => ipcRenderer.invoke(IPC.OPEN_OUTPUT, filePath),
   openSettings: () => ipcRenderer.invoke(IPC.OPEN_SETTINGS),
 });
-
