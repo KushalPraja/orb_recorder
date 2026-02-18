@@ -230,10 +230,184 @@ function remuxToCleanMp4(
   });
 }
 
+/* ─── Hex-to-RGB helper ────────────────────────────────────────────── */
+
+function hexToRgb(hex) {
+  const h = hex.replace("#", "");
+  return [
+    parseInt(h.substring(0, 2), 16),
+    parseInt(h.substring(2, 4), 16),
+    parseInt(h.substring(4, 6), 16),
+  ];
+}
+
+/**
+ * Apply Screen-Studio-style visual polish: rounded corners + coloured
+ * background with padding.  Pure FFmpeg — no Python / OpenCV needed.
+ *
+ * @param {string} inputPath   Clean MP4 (output of remuxToCleanMp4 or auto-zoom)
+ * @param {string} outputPath  Final polished MP4
+ * @param {object} opts        Visual options
+ * @param {function} [onProgress] Progress callback
+ * @returns {Promise<string>}  outputPath on success
+ */
+async function applyVisualExport(
+  inputPath,
+  outputPath,
+  opts = {},
+  onProgress = null,
+) {
+  const {
+    cornerRadius = 12,
+    padding = 48,
+    backgroundType = "solid",
+    backgroundColor = "#6366f1",
+    gradientStart = "#667eea",
+    gradientEnd = "#764ba2",
+  } = opts;
+
+  const info = await probeVideo(inputPath);
+  const { width: srcW, height: srcH, duration, fps, nbFrames } = info;
+
+  // Output canvas = video + padding on each side, ensure even dimensions
+  const rawW = srcW + padding * 2;
+  const rawH = srcH + padding * 2;
+  const finalW = rawW + (rawW % 2);
+  const finalH = rawH + (rawH % 2);
+
+  // Clamp corner radius to something sensible
+  const R = Math.max(
+    0,
+    Math.min(cornerRadius, Math.floor(Math.min(srcW, srcH) / 4)),
+  );
+
+  // ── Background source (lavfi color) ──────────────────────────────
+  // For compatibility with older FFmpeg builds, gradient presets are mapped
+  // to a single representative solid color (midpoint of start/end).
+  let bgHex = backgroundColor;
+  if (backgroundType === "gradient") {
+    const [r1, g1, b1] = hexToRgb(gradientStart);
+    const [r2, g2, b2] = hexToRgb(gradientEnd);
+    const rm = Math.round((r1 + r2) / 2)
+      .toString(16)
+      .padStart(2, "0");
+    const gm = Math.round((g1 + g2) / 2)
+      .toString(16)
+      .padStart(2, "0");
+    const bm = Math.round((b1 + b2) / 2)
+      .toString(16)
+      .padStart(2, "0");
+    bgHex = `#${rm}${gm}${bm}`;
+  }
+
+  const bgColor = bgHex.replace("#", "0x");
+  const outFps =
+    Number.isFinite(Number(fps)) && Number(fps) > 0
+      ? Math.round(Number(fps))
+      : 30;
+
+  // ── Build filter_complex (video input[0] + color input[1]) ───────
+  let filterComplex;
+  if (R > 0) {
+    // This alpha expression matches the pattern already validated manually.
+    const alphaExpr = `if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),255)`;
+    filterComplex = [
+      `[0:v]format=yuva420p,geq=lum='p(X,Y)':a='${alphaExpr}'[rounded]`,
+      `[1:v][rounded]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
+    ].join(";");
+  } else {
+    filterComplex = `[1:v][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`;
+  }
+
+  const frameCount = Number.isFinite(nbFrames) && nbFrames > 0 ? Math.round(nbFrames) : 0;
+
+  const args = [
+    "-i",
+    inputPath,
+    "-f",
+    "lavfi",
+    "-i",
+    `color=${bgColor}:s=${finalW}x${finalH}:r=${outFps}`,
+    "-filter_complex",
+    filterComplex,
+    "-map",
+    "[vout]",
+    "-c:v",
+    "libx264",
+    "-preset",
+    "medium",
+    "-crf",
+    "18",
+    "-pix_fmt",
+    "yuv420p",
+    "-r",
+    String(outFps),
+    ...(frameCount > 0 ? ["-frames:v", String(frameCount)] : []),
+    "-shortest",
+    "-an",
+    "-movflags",
+    "+faststart",
+    "-y",
+    outputPath,
+  ];
+
+  console.log(
+    `[FFmpeg] Visual export: ${srcW}x${srcH} → ${finalW}x${finalH}  R=${R}  pad=${padding}`,
+  );
+  console.log(
+    `[FFmpeg] Background: ${bgColor} @ ${finalW}x${finalH} ${outFps}fps`,
+  );
+  console.log(`[FFmpeg] Filter graph:\n${filterComplex}`);
+
+  const { promise } = spawnFfmpeg(args, onProgress, duration);
+  try {
+    await promise;
+    console.log(`[FFmpeg] Visual export done → ${outputPath}`);
+    return outputPath;
+  } catch (err) {
+    console.warn(
+      `[FFmpeg] Rounded export failed, retrying with pad fallback: ${err.message}`,
+    );
+
+    const fallbackArgs = [
+      "-i",
+      inputPath,
+      "-vf",
+      `pad=${finalW}:${finalH}:(ow-iw)/2:(oh-ih)/2:color=${bgColor}`,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "medium",
+      "-crf",
+      "18",
+      "-pix_fmt",
+      "yuv420p",
+      "-r",
+      String(outFps),
+      "-an",
+      "-movflags",
+      "+faststart",
+      "-y",
+      outputPath,
+    ];
+
+    const { promise: fallbackPromise } = spawnFfmpeg(
+      fallbackArgs,
+      onProgress,
+      duration,
+    );
+    await fallbackPromise;
+    console.log(`[FFmpeg] Fallback visual export done → ${outputPath}`);
+    return outputPath;
+  }
+}
+
 module.exports = {
   getFfmpegPath,
   getFfprobePath,
   probeVideo,
   spawnFfmpeg,
   remuxToCleanMp4,
+  applyVisualExport,
+  hexToRgb,
 };

@@ -1,57 +1,279 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ReviewPage — export screen with live preview + option toggles
+   ═══════════════════════════════════════════════════════════════════ */
+
 .review-page {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-.review-header {
+/* ─── Header ─────────────────────────────────────────────────────── */
+
+.rv-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 20px 12px;
+  padding: 18px 20px 10px;
   flex-shrink: 0;
 }
 
-.review-header h2 {
-  font-size: 16px;
+.rv-header h2 {
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0.02em;
 }
 
-.review-meta {
+.rv-meta {
   font-size: 11px;
   color: var(--text-tertiary);
-  font-family: var(--font-mono);
 }
 
-/* ─── Preview ────────────────────────────────────────────────────── */
+/* ─── Body — scrollable area with preview + options ──────────────── */
 
-.review-preview {
-  padding: 0 20px;
+.rv-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── Live Preview ───────────────────────────────────────────────── */
+
+.rv-preview-wrap {
   flex-shrink: 0;
 }
 
-.review-video {
+.rv-preview-canvas {
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: background 0.3s ease, padding 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 280px;  /* constrain the whole box */
+}
+
+.rv-video {
+  display: block;
   width: 100%;
+  height: 100%;
+  max-height: 280px;  /* match canvas so video fills it */
+  object-fit: contain;
+  background: #000;
+  outline: none;
+  transition: border-radius 0.25s ease;
+}
+.rv-video:focus { outline: none; }
+
+/* ─── Options panel ──────────────────────────────────────────────── */
+
+.rv-options {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+/* Single option row */
+.rv-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  max-height: 300px;
+}
+
+.rv-option-row + .rv-option-row {
+  margin-top: 6px;
+}
+
+.rv-option-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.rv-option-icon {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.rv-hint {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+  margin-left: 2px;
+}
+
+/* ─── Toggle switch ──────────────────────────────────────────────── */
+
+.rv-toggle {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.rv-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.rv-toggle-track {
+  display: block;
+  width: 32px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  position: relative;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.rv-toggle-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.rv-toggle input:checked + .rv-toggle-track {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+.rv-toggle input:checked + .rv-toggle-track::after {
+  transform: translateX(14px);
+  background: var(--bg-primary);
+}
+
+/* ─── Sub-options (background settings) ──────────────────────────── */
+
+.rv-sub-options {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: rv-slide-in 0.2s ease;
+}
+
+@keyframes rv-slide-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rv-sub-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  min-width: 48px;
+  flex-shrink: 0;
+}
+
+/* Swatch row */
+.rv-swatch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rv-swatches {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rv-swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  padding: 0;
   outline: none;
 }
 
-.review-video:focus {
+.rv-swatch:hover {
+  transform: scale(1.15);
+}
+
+.rv-swatch.active {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 0 1px var(--bg-primary);
+}
+
+/* Slider row */
+.rv-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rv-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 3px;
+  background: var(--bg-tertiary);
+  border-radius: 2px;
   outline: none;
+}
+
+.rv-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  cursor: pointer;
+  border: none;
+  transition: transform 0.12s ease;
+}
+
+.rv-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.25);
+}
+
+.rv-slider-val {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  min-width: 34px;
+  text-align: right;
 }
 
 /* ─── Progress ───────────────────────────────────────────────────── */
 
-.review-progress {
-  padding: 16px 20px 0;
+.rv-progress {
+  padding: 12px 20px 0;
+  flex-shrink: 0;
 }
 
-.progress-track {
+.rv-track {
   width: 100%;
   height: 3px;
   background: var(--bg-tertiary);
@@ -59,44 +281,100 @@
   overflow: hidden;
 }
 
-.progress-fill {
+.rv-fill {
   height: 100%;
   background: var(--text-primary);
   border-radius: 2px;
   transition: width 0.3s ease;
 }
 
-.progress-label {
+.rv-progress-label {
   display: block;
   text-align: center;
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
-  margin-top: 8px;
-  font-family: var(--font-mono);
+  margin-top: 6px;
 }
 
 /* ─── Error ──────────────────────────────────────────────────────── */
 
-.review-error {
-  margin: 12px 20px 0;
-  padding: 10px 12px;
+.rv-error {
+  margin: 10px 20px 0;
+  padding: 8px 12px;
   background: var(--danger-muted);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: var(--radius-sm);
   color: var(--danger);
-  font-size: 12px;
+  font-size: 11px;
+  flex-shrink: 0;
 }
 
 /* ─── Actions ────────────────────────────────────────────────────── */
 
-.review-actions {
-  padding: 20px;
+.rv-actions {
+  padding: 14px 20px 18px;
   display: flex;
   gap: 8px;
   justify-content: center;
-  margin-top: auto;
   flex-shrink: 0;
+  border-top: 1px solid var(--border);
 }
+
+/* ─── Buttons ────────────────────────────────────────────────────── */
+
+.rv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  cursor: pointer;
+  border: none;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.rv-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.rv-btn--primary {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+.rv-btn--primary:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.rv-btn--secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.rv-btn--secondary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--border-hover);
+}
+
+.rv-btn--danger {
+  background: transparent;
+  color: var(--text-tertiary);
+  border: 1px solid var(--border);
+}
+
+.rv-btn--danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: var(--danger-muted);
+}
+
+/* ─── Empty state ────────────────────────────────────────────────── */
 
 .review-empty {
   display: flex;
@@ -109,80 +387,7 @@
   font-size: 13px;
 }
 
-/* ─── Shared Buttons ─────────────────────────────────────────────── */
-
-.btn-primary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border: none;
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: opacity var(--transition-fast);
-}
-
-.btn-primary:hover:not(:disabled) {
-  opacity: 0.85;
-}
-
-.btn-primary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  background: transparent;
-  color: var(--text-secondary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast);
-}
-
-.btn-secondary:hover {
-  background: var(--bg-secondary);
-  border-color: var(--border-hover);
-}
-
-.btn-danger {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 18px;
-  background: transparent;
-  color: var(--text-tertiary);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 12px;
-  font-weight: 500;
-  font-family: var(--font-sans);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-}
-
-.btn-danger:hover:not(:disabled) {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: var(--danger-muted);
-}
-
-.btn-danger:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
+/* ─── Spinner ────────────────────────────────────────────────────── */
 
 .spinner {
   animation: spin 1s linear infinite;

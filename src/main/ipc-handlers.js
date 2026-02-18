@@ -329,13 +329,24 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     }
 
     try {
-      // Always drive post-processing from the authoritative settings object.
-      // Callers may pass overrides, but the full settings object is the fallback.
       const outputPath = await processVideo({
         recordingDir: sessionDir,
         fps: settings.fps,
+
+        // Auto-zoom — only when the caller explicitly enables it
+        autoZoom: !!opts.autoZoom,
         zoomFactor: settings.zoomFactor,
         zoomDuration: settings.zoomDuration,
+
+        // Visual polish — background + rounded corners
+        background: !!opts.background,
+        cornerRadius: opts.cornerRadius ?? 12,
+        padding: opts.padding ?? 48,
+        backgroundType: opts.backgroundType ?? "solid",
+        backgroundColor: opts.backgroundColor ?? "#6366f1",
+        gradientStart: opts.gradientStart ?? "#667eea",
+        gradientEnd: opts.gradientEnd ?? "#764ba2",
+
         onProgress: (progress) => {
           mainWindow.webContents.send(IPC.PROCESSING_PROGRESS, progress);
         },
