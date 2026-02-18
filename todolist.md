@@ -44,3 +44,15 @@ const presets = {
   }
 }
 
+orb
+
+options:
+- image
+- color
+- gradient
+- None
+
+- image blur : none moderate strong
+
+
+- add option for audio recording (might not work on mac)
