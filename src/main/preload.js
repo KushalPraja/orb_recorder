@@ -55,5 +55,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // ─── Dialogs & shell ──────────────────────────────────────────────
   pickOutputDir: () => ipcRenderer.invoke(IPC.PICK_OUTPUT_DIR),
   openOutput: (filePath) => ipcRenderer.invoke(IPC.OPEN_OUTPUT, filePath),
+  openSettings: () => ipcRenderer.invoke(IPC.OPEN_SETTINGS),
 });
 

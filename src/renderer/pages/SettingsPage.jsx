@@ -4,7 +4,7 @@ import { useSettings } from "../contexts/SettingsContext";
 import "./SettingsPage.css";
 
 export function SettingsPage({ onNavigate }) {
-  const { settings, isLoading, updateSetting, pickOutputDir } = useSettings();
+  const { settings, isLoading, updateSetting, pickOutputDir, openSettingsFile } = useSettings();
   const [savedKey, setSavedKey] = useState(null);
 
   if (isLoading || !settings) {
@@ -128,11 +128,23 @@ export function SettingsPage({ onNavigate }) {
         {/* About section */}
         <div className="settings-section">
           <div className="section-label">About</div>
+
           <div className="setting-row">
             <div className="setting-label">
               <span>Version</span>
             </div>
             <span className="setting-value-static">1.0.0</span>
+          </div>
+
+          <div className="setting-row">
+            <div className="setting-label">
+              <span>Settings file</span>
+              <span className="setting-hint">settings.json</span>
+            </div>
+            <button className="setting-btn" onClick={openSettingsFile}>
+              <FolderOpen size={13} />
+              <span>Edit</span>
+            </button>
           </div>
         </div>
       </div>

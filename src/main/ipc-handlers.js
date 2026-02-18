@@ -381,6 +381,25 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     }
   });
 
+  // Open the app settings.json in the user's editor (create file if missing)
+  ipcMain.handle(IPC.OPEN_SETTINGS, async () => {
+    try {
+      const filePath = getSettingsPath();
+      // Ensure a settings file exists so the editor has something to open
+      if (!fs.existsSync(filePath)) {
+        saveSettings(settings);
+      }
+      if (fs.existsSync(filePath)) {
+        await shell.openPath(filePath);
+        return true;
+      }
+      return false;
+    } catch (err) {
+      console.error('[IPC] Failed to open settings file:', err);
+      throw err;
+    }
+  });
+
   // ─── Screen Sources ──────────────────────────────────────────────
 
   ipcMain.handle(IPC.GET_SOURCES, async () => {

@@ -81,6 +81,7 @@ const IPC = {
   // Dialogs & shell
   PICK_OUTPUT_DIR: "dialog:pickOutputDir",
   OPEN_OUTPUT:     "shell:openOutput",
+  OPEN_SETTINGS:   "shell:openSettings",
 };
 
 module.exports = {

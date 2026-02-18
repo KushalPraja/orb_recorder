@@ -71,9 +71,17 @@ export function SettingsProvider({ children }) {
     }
   }, []);
 
+  const openSettingsFile = useCallback(async () => {
+    try {
+      await window.electronAPI.openSettings();
+    } catch (err) {
+      console.error("[SettingsContext] Failed to open settings file:", err);
+    }
+  }, []);
+
   return (
     <SettingsContext.Provider
-      value={{ settings, isLoading, updateSetting, pickOutputDir }}
+      value={{ settings, isLoading, updateSetting, pickOutputDir, openSettingsFile }}
     >
       {children}
     </SettingsContext.Provider>
