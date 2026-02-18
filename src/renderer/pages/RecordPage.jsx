@@ -1,10 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { Monitor, Circle, Loader2 } from "lucide-react";
+import { useSettings } from "../contexts/SettingsContext";
 import "./RecordPage.css";
 
 const api = window.electronAPI;
 
 export function RecordPage({ onNavigate }) {
+  const { settings } = useSettings();
   const [sources, setSources] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
   const [previewing, setPreviewing] = useState(false);
@@ -67,9 +69,10 @@ export function RecordPage({ onNavigate }) {
     // If no stream, acquire one
     if (!stream || stream.getTracks().every((t) => t.readyState !== "live")) {
       try {
-        const settings = await api.getSettings();
+        // fps comes from SettingsContext — no extra IPC round-trip needed
+        const fps = settings.fps
         stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: settings.fps || 30 } },
+          video: { frameRate: { ideal: fps } },
           audio: false,
         });
         streamRef.current = stream;
@@ -95,7 +98,7 @@ export function RecordPage({ onNavigate }) {
       sessionRef.current = session;
       chunksRef.current = [];
 
-      let mimeType = "video/webm;codecs=vp9";
+      let mimeType = settings.mimeType
       if (!MediaRecorder.isTypeSupported(mimeType))
         mimeType = "video/webm;codecs=vp8";
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";

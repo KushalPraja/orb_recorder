@@ -4,6 +4,7 @@ import { HomePage } from "./pages/HomePage";
 import { RecordPage } from "./pages/RecordPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SettingsProvider } from "./contexts/SettingsContext";
 
 export function App() {
   const [page, setPage] = useState("home"); // home | record | review | settings
@@ -17,7 +18,7 @@ export function App() {
   }, []);
 
   return (
-    <>
+    <SettingsProvider>
       <Titlebar currentPage={page} onNavigate={navigateTo} />
       <main
         style={{
@@ -34,6 +35,6 @@ export function App() {
         )}
         {page === "settings" && <SettingsPage onNavigate={navigateTo} />}
       </main>
-    </>
+    </SettingsProvider>
   );
 }

@@ -1,31 +1,14 @@
 // Preload script — securely exposes main-process APIs to the renderer
-// via contextBridge. This is the ONLY way the renderer can talk to Node.js.
+// via contextBridge. This is the ONLY bridge between the renderer and Node.js.
+//
+// IPC channel names come from shared/constants so there is exactly one
+// definition of every channel string in the entire codebase.
 
 const { contextBridge, ipcRenderer } = require("electron");
-
-const IPC = {
-  START_RECORDING: "recording:start",
-  STOP_RECORDING: "recording:stop",
-  SET_CAPTURE_SOURCE: "recording:set-capture-source",
-  PREPARE_RECORDING_UI: "recording:prepare-ui",
-  FINISH_RECORDING_UI: "recording:finish-ui",
-  OVERLAY_STOP_REQUEST: "recording:overlay-stop-request",
-  SAVE_RECORDING: "recording:save",
-  GET_RECORDINGS: "recordings:list",
-  DELETE_RECORDING: "recordings:delete",
-  GET_SOURCES: "sources:list",
-  PROCESS_VIDEO: "video:process",
-  PROCESSING_PROGRESS: "video:progress",
-  PROCESSING_DONE: "video:done",
-  PROCESSING_ERROR: "video:error",
-  GET_SETTINGS: "settings:get",
-  SET_SETTINGS: "settings:set",
-  PICK_OUTPUT_DIR: "dialog:pickOutputDir",
-  OPEN_OUTPUT: "shell:openOutput",
-};
+const { IPC } = require("../shared/constants");
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  // ─── Recording ─────────────────────────────────────────────────
+  // ─── Recording lifecycle ───────────────────────────────────────────
   startRecording: () => ipcRenderer.invoke(IPC.START_RECORDING),
   stopRecording: () => ipcRenderer.invoke(IPC.STOP_RECORDING),
   setCaptureSource: (sourceId) =>
@@ -33,47 +16,44 @@ contextBridge.exposeInMainWorld("electronAPI", {
   prepareRecordingUi: () => ipcRenderer.invoke(IPC.PREPARE_RECORDING_UI),
   finishRecordingUi: () => ipcRenderer.invoke(IPC.FINISH_RECORDING_UI),
   saveRecording: (buffer) => ipcRenderer.invoke(IPC.SAVE_RECORDING, buffer),
-
   onOverlayStopRequest: (callback) => {
     const handler = () => callback();
     ipcRenderer.on(IPC.OVERLAY_STOP_REQUEST, handler);
     return () => ipcRenderer.removeListener(IPC.OVERLAY_STOP_REQUEST, handler);
   },
 
-  // ─── Recoding Fetching ────────────────────────────────────
+  // ─── Library management ────────────────────────────────────────────
   getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),
   deleteRecording: (sessionDir) =>
     ipcRenderer.invoke(IPC.DELETE_RECORDING, sessionDir),
 
-  // ─── Screen Sources ───────────────────────────────────────────
+  // ─── Screen sources ────────────────────────────────────────────────
   getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),
 
-  // ─── Post-Processing ──────────────────────────────────────────
+  // ─── Post-processing ──────────────────────────────────────────────
   processVideo: (opts) => ipcRenderer.invoke(IPC.PROCESS_VIDEO, opts),
-
   onProgress: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on(IPC.PROCESSING_PROGRESS, handler);
     return () => ipcRenderer.removeListener(IPC.PROCESSING_PROGRESS, handler);
   },
-
   onProcessingDone: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on(IPC.PROCESSING_DONE, handler);
     return () => ipcRenderer.removeListener(IPC.PROCESSING_DONE, handler);
   },
-
   onProcessingError: (callback) => {
     const handler = (_event, data) => callback(data);
     ipcRenderer.on(IPC.PROCESSING_ERROR, handler);
     return () => ipcRenderer.removeListener(IPC.PROCESSING_ERROR, handler);
   },
 
-  // ─── Settings ──────────────────────────────────────────────────
+  // ─── Settings ──────────────────────────────────────────────────────
   getSettings: () => ipcRenderer.invoke(IPC.GET_SETTINGS),
   setSettings: (settings) => ipcRenderer.invoke(IPC.SET_SETTINGS, settings),
 
-  // ─── Dialogs & Shell ──────────────────────────────────────────
+  // ─── Dialogs & shell ──────────────────────────────────────────────
   pickOutputDir: () => ipcRenderer.invoke(IPC.PICK_OUTPUT_DIR),
   openOutput: (filePath) => ipcRenderer.invoke(IPC.OPEN_OUTPUT, filePath),
 });
+

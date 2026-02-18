@@ -13,9 +13,7 @@ const {
   EVENTS_FILE,
   RAW_RECORDING_FILE,
   OUTPUT_FILE,
-  DEFAULT_ZOOM_FACTOR,
-  DEFAULT_ZOOM_DURATION,
-  DEFAULT_FPS,
+  DEFAULT_SETTINGS,
 } = require("../shared/constants");
 const { getFfmpegPath, remuxToCleanMp4 } = require("./ffmpeg-utils");
 
@@ -95,9 +93,11 @@ async function processVideo(opts) {
     );
   }
 
-  const zoom = Number(zoomFactor) || DEFAULT_ZOOM_FACTOR;
-  const hold = Number(zoomDuration) || DEFAULT_ZOOM_DURATION;
-  const targetFps = Number(opts.fps) || DEFAULT_FPS;
+  // ipc-handlers always passes complete settings, but guard with defaults here
+  // so processVideo stays self-contained and testable in isolation.
+  const zoom = Number(zoomFactor) || DEFAULT_SETTINGS.zoomFactor;
+  const hold = Number(zoomDuration) || DEFAULT_SETTINGS.zoomDuration;
+  const targetFps = Number(opts.fps) || DEFAULT_SETTINGS.fps;
 
   console.log(`[PostProcessor] Preparing clean intermediate…`);
   console.log(`[PostProcessor]   input:  ${inputPath}`);

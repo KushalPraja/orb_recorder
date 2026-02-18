@@ -15,10 +15,7 @@ const inputTracker = require("./input-tracker");
 const { processVideo } = require("./post-processor");
 const {
   IPC,
-  DEFAULT_FPS,
-  DEFAULT_ZOOM_FACTOR,
-  DEFAULT_ZOOM_DURATION,
-  DEFAULT_OUTPUT_DIR,
+  DEFAULT_SETTINGS,
   RAW_RECORDING_FILE,
   EVENTS_FILE,
   OUTPUT_FILE,
@@ -33,23 +30,17 @@ function getSettingsPath() {
 }
 
 function loadSettings() {
-  const defaults = {
-    fps: DEFAULT_FPS,
-    zoomFactor: DEFAULT_ZOOM_FACTOR,
-    zoomDuration: DEFAULT_ZOOM_DURATION,
-    outputDir: DEFAULT_OUTPUT_DIR,
-  };
-
   try {
     const filePath = getSettingsPath();
     if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
-      return { ...defaults, ...data };
+      const persisted = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      // Merge persisted values on top of defaults so new keys always have a value.
+      return { ...DEFAULT_SETTINGS, ...persisted };
     }
   } catch (err) {
     console.error("[Settings] Failed to load settings:", err);
   }
-  return defaults;
+  return { ...DEFAULT_SETTINGS };
 }
 
 function saveSettings(settings) {
@@ -332,10 +323,13 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     }
 
     try {
+      // Always drive post-processing from the authoritative settings object.
+      // Callers may pass overrides, but the full settings object is the fallback.
       const outputPath = await processVideo({
         recordingDir: sessionDir,
-        zoomFactor: opts.zoomFactor || settings.zoomFactor,
-        zoomDuration: opts.zoomDuration || settings.zoomDuration,
+        fps: settings.fps,
+        zoomFactor: settings.zoomFactor,
+        zoomDuration: settings.zoomDuration,
         onProgress: (progress) => {
           mainWindow.webContents.send(IPC.PROCESSING_PROGRESS, progress);
         },

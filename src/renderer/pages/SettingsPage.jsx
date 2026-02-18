@@ -1,56 +1,46 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { FolderOpen } from "lucide-react";
+import { useSettings } from "../contexts/SettingsContext";
 import "./SettingsPage.css";
 
-const api = window.electronAPI;
-
 export function SettingsPage({ onNavigate }) {
-  const [settings, setSettings] = useState({
-    fps: 30,
-    zoomFactor: 2.0,
-    zoomDuration: 1.5,
-    outputDir: "",
-  });
-  const [saved, setSaved] = useState(false);
+  const { settings, isLoading, updateSetting, pickOutputDir } = useSettings();
+  const [savedKey, setSavedKey] = useState(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const s = await api.getSettings();
-        setSettings(s);
-      } catch (err) {
-        console.error("Failed to load settings:", err);
-      }
-    })();
-  }, []);
+  if (isLoading || !settings) {
+    return (
+      <div className="settings-page">
+        <div className="settings-header">
+          <h2>Settings</h2>
+        </div>
+        <div className="settings-list" />
+      </div>
+    );
+  }
 
-  const update = (key, value) => {
-    const next = { ...settings, [key]: value };
-    setSettings(next);
-    api.setSettings({ [key]: value });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+  const handleUpdate = (key, value) => {
+    updateSetting(key, value);
+    setSavedKey(key);
+    setTimeout(() => setSavedKey(null), 1500);
   };
 
-  const pickDir = async () => {
-    const dir = await api.pickOutputDir();
-    if (dir) {
-      setSettings((prev) => ({ ...prev, outputDir: dir }));
-    }
+  const handlePickDir = async () => {
+    await pickOutputDir();
+    setSavedKey("outputDir");
+    setTimeout(() => setSavedKey(null), 1500);
   };
 
   const shortenPath = (p) => {
     if (!p) return "—";
     const parts = p.split(/[/\\]/);
-    if (parts.length > 3) return `.../${parts.slice(-2).join("/")}`;
-    return p;
+    return parts.length > 3 ? `.../${parts.slice(-2).join("/")}` : p;
   };
 
   return (
     <div className="settings-page">
       <div className="settings-header">
         <h2>Settings</h2>
-        {saved && <span className="save-indicator">Saved</span>}
+        {savedKey && <span className="save-indicator">Saved</span>}
       </div>
 
       <div className="settings-list">
@@ -65,7 +55,9 @@ export function SettingsPage({ onNavigate }) {
             <select
               className="setting-select"
               value={settings.fps}
-              onChange={(e) => update("fps", parseInt(e.target.value, 10))}
+              onChange={(e) =>
+                handleUpdate("fps", parseInt(e.target.value, 10))
+              }
             >
               <option value={15}>15 fps</option>
               <option value={24}>24 fps</option>
@@ -81,7 +73,7 @@ export function SettingsPage({ onNavigate }) {
                 {shortenPath(settings.outputDir)}
               </span>
             </div>
-            <button className="setting-btn" onClick={pickDir}>
+            <button className="setting-btn" onClick={handlePickDir}>
               <FolderOpen size={13} />
               <span>Change</span>
             </button>
@@ -106,7 +98,9 @@ export function SettingsPage({ onNavigate }) {
               max="3"
               step="0.1"
               value={settings.zoomFactor}
-              onChange={(e) => update("zoomFactor", parseFloat(e.target.value))}
+              onChange={(e) =>
+                handleUpdate("zoomFactor", parseFloat(e.target.value))
+              }
             />
           </div>
 
@@ -125,7 +119,7 @@ export function SettingsPage({ onNavigate }) {
               step="0.1"
               value={settings.zoomDuration}
               onChange={(e) =>
-                update("zoomDuration", parseFloat(e.target.value))
+                handleUpdate("zoomDuration", parseFloat(e.target.value))
               }
             />
           </div>
