@@ -6,9 +6,9 @@
 // The heavy lifting is done by scripts/process.py (opencv + ffmpeg pipe).
 // This module just resolves paths, spawns Python, and parses progress.
 
-const { spawn } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+const { spawn } = require("child_process");
+const fs = require("fs");
+const path = require("path");
 const {
   EVENTS_FILE,
   RAW_RECORDING_FILE,
@@ -16,23 +16,40 @@ const {
   DEFAULT_ZOOM_FACTOR,
   DEFAULT_ZOOM_DURATION,
   DEFAULT_FPS,
-} = require('../shared/constants');
-const { getFfmpegPath, remuxToCleanMp4 } = require('./ffmpeg-utils');
+} = require("../shared/constants");
+const { getFfmpegPath, remuxToCleanMp4 } = require("./ffmpeg-utils");
 
 /* ─── Resolve binaries ─────────────────────────────────────────────── */
 
+function safeUnlink(filePath) {
+  if (!filePath || !fs.existsSync(filePath)) return;
+  try {
+    fs.unlinkSync(filePath);
+  } catch (_err) {}
+}
+
 function getPythonPath() {
-  if (process.platform === 'win32') return 'python';
-  return 'python3';
+  if (process.platform === "win32") return "python";
+  return "python3";
 }
 
 function getProcessorBinaryPath() {
-  const localBin = path.join(__dirname, '..', '..', 'bin', process.platform === 'win32' ? 'screen_processor.exe' : 'screen_processor');
+  const localBin = path.join(
+    __dirname,
+    "..",
+    "..",
+    "bin",
+    process.platform === "win32" ? "screen_processor.exe" : "screen_processor",
+  );
   if (fs.existsSync(localBin)) {
     return localBin;
   }
 
-  const packagedBin = path.join(process.resourcesPath || '', 'bin', process.platform === 'win32' ? 'screen_processor.exe' : 'screen_processor');
+  const packagedBin = path.join(
+    process.resourcesPath || "",
+    "bin",
+    process.platform === "win32" ? "screen_processor.exe" : "screen_processor",
+  );
   if (fs.existsSync(packagedBin)) {
     return packagedBin;
   }
@@ -41,22 +58,27 @@ function getProcessorBinaryPath() {
 }
 
 function getScriptPath() {
-  let p = path.join(__dirname, '..', '..', 'scripts', 'process.py');
-  if (!fs.existsSync(p)) {
-    p = path.join(process.resourcesPath || '', 'scripts', 'process.py');
-  }
-  return p;
+  const devPath = path.join(__dirname, "..", "..", "scripts", "process.py");
+  if (fs.existsSync(devPath)) return devPath;
+
+  const packagedPath = path.join(
+    process.resourcesPath || "",
+    "scripts",
+    "process.py",
+  );
+  return fs.existsSync(packagedPath) ? packagedPath : null;
 }
 
 /* ─── Main entry ───────────────────────────────────────────────────── */
 
 async function processVideo(opts) {
-  const { recordingDir, outputPath, zoomFactor, zoomDuration, onProgress } = opts;
+  const { recordingDir, outputPath, zoomFactor, zoomDuration, onProgress } =
+    opts;
 
-  const inputPath  = path.join(recordingDir, RAW_RECORDING_FILE);
+  const inputPath = path.join(recordingDir, RAW_RECORDING_FILE);
   const eventsPath = path.join(recordingDir, EVENTS_FILE);
-  const outPath    = outputPath || path.join(recordingDir, OUTPUT_FILE);
-  const cleanInputPath = path.join(recordingDir, '__intermediate_clean.mp4');
+  const outPath = outputPath || path.join(recordingDir, OUTPUT_FILE);
+  const cleanInputPath = path.join(recordingDir, "__intermediate_clean.mp4");
 
   if (!fs.existsSync(inputPath)) {
     throw new Error(`Recording not found: ${inputPath}`);
@@ -67,8 +89,10 @@ async function processVideo(opts) {
   const scriptPath = processorBinPath ? null : getScriptPath();
   const pythonBin = processorBinPath ? null : getPythonPath();
 
-  if (!processorBinPath && !fs.existsSync(scriptPath)) {
-    throw new Error(`Processor not found (checked binary and script): ${scriptPath}`);
+  if (!processorBinPath && !scriptPath) {
+    throw new Error(
+      `Processor not found (checked binary and script): ${scriptPath}`,
+    );
   }
 
   const zoom = Number(zoomFactor) || DEFAULT_ZOOM_FACTOR;
@@ -80,7 +104,7 @@ async function processVideo(opts) {
   console.log(`[PostProcessor]   output: ${outPath}`);
   console.log(`[PostProcessor]   zoom=${zoom} hold=${hold}`);
 
-  if (onProgress) onProgress({ percent: 0, phase: 'Starting processor…' });
+  if (onProgress) onProgress({ percent: 0, phase: "Starting processor…" });
 
   try {
     await remuxToCleanMp4(
@@ -88,18 +112,17 @@ async function processVideo(opts) {
       cleanInputPath,
       (p) => {
         if (onProgress && Number.isFinite(p.percent)) {
-          const remuxPct = Math.min(70, Math.max(0, Math.round(p.percent * 0.7)));
-          onProgress({ percent: remuxPct, phase: 'Normalizing recording…' });
+          const remuxPct = Math.min(
+            70,
+            Math.max(0, Math.round(p.percent * 0.7)),
+          );
+          onProgress({ percent: remuxPct, phase: "Normalizing recording…" });
         }
       },
       targetFps,
     );
   } catch (err) {
-    if (fs.existsSync(cleanInputPath)) {
-      try {
-        fs.unlinkSync(cleanInputPath);
-      } catch (_err) {}
-    }
+    safeUnlink(cleanInputPath);
     throw err;
   }
 
@@ -108,59 +131,65 @@ async function processVideo(opts) {
   return new Promise((resolve, reject) => {
     const args = processorBinPath
       ? [
-        cleanInputPath,
-        eventsPath,
-        outPath,
-        '--zoom', String(zoom),
-        '--hold', String(hold),
-        '--ffmpeg', ffmpegBin,
-      ]
+          cleanInputPath,
+          eventsPath,
+          outPath,
+          "--zoom",
+          String(zoom),
+          "--hold",
+          String(hold),
+          "--ffmpeg",
+          ffmpegBin,
+        ]
       : [
-        scriptPath,
-        cleanInputPath,
-        eventsPath,
-        outPath,
-        '--zoom', String(zoom),
-        '--hold', String(hold),
-        '--ffmpeg', ffmpegBin,
-      ];
+          scriptPath,
+          cleanInputPath,
+          eventsPath,
+          outPath,
+          "--zoom",
+          String(zoom),
+          "--hold",
+          String(hold),
+          "--ffmpeg",
+          ffmpegBin,
+        ];
 
     const command = processorBinPath || pythonBin;
 
     const proc = spawn(command, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ["ignore", "pipe", "pipe"],
     });
 
-    let stderr = '';
+    let stderr = "";
+    const cleanup = () => safeUnlink(cleanInputPath);
 
-    proc.stdout.on('data', (chunk) => {
-      const lines = chunk.toString().split('\n');
+    proc.stdout.on("data", (chunk) => {
+      const lines = chunk.toString().split("\n");
       for (const line of lines) {
         const trimmed = line.trim();
-        if (trimmed.startsWith('PROGRESS:')) {
+        if (trimmed.startsWith("PROGRESS:")) {
           const pct = parseInt(trimmed.slice(9), 10);
           if (Number.isFinite(pct) && onProgress) {
-            const mappedPct = Math.min(100, Math.max(70, 70 + Math.round(pct * 0.3)));
-            onProgress({ percent: mappedPct, phase: 'Applying zoom…' });
+            const mappedPct = Math.min(
+              100,
+              Math.max(70, 70 + Math.round(pct * 0.3)),
+            );
+            onProgress({ percent: mappedPct, phase: "Applying zoom…" });
           }
         }
       }
     });
 
-    proc.stderr.on('data', (chunk) => {
+    proc.stderr.on("data", (chunk) => {
       const text = chunk.toString();
       stderr += text;
-      for (const line of text.split('\n')) {
+      for (const line of text.split("\n")) {
         if (line.trim()) console.log(`[Python] ${line.trim()}`);
       }
     });
 
-    proc.on('close', (code) => {
-      if (fs.existsSync(cleanInputPath)) {
-        try {
-          fs.unlinkSync(cleanInputPath);
-        } catch (_err) {}
-      }
+    proc.on("close", (code) => {
+      cleanup();
 
       if (code === 0) {
         console.log(`[PostProcessor] Done → ${outPath}`);
@@ -172,19 +201,14 @@ async function processVideo(opts) {
       }
     });
 
-    proc.on('error', (err) => {
-      if (fs.existsSync(cleanInputPath)) {
-        try {
-          fs.unlinkSync(cleanInputPath);
-        } catch (_err) {}
-      }
+    proc.on("error", (err) => {
+      cleanup();
 
-      if (err.code === 'ENOENT') {
-        reject(new Error(
-          processorBinPath
-            ? `Bundled processor not found (tried "${command}").`
-            : `Python not found (tried "${pythonBin}"). Install Python 3 and run: pip install opencv-python numpy`
-        ));
+      if (err.code === "ENOENT") {
+        const dependencyMessage = processorBinPath
+          ? `Bundled processor not found (tried "${command}").`
+          : `Python not found (tried "${pythonBin}"). Install Python 3 and run: pip install opencv-python numpy`;
+        reject(new Error(dependencyMessage));
       } else {
         reject(err);
       }

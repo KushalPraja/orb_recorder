@@ -1,6 +1,13 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Video, Plus, Trash2, FolderOpen, Clock, HardDrive } from 'lucide-react';
-import './HomePage.css';
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  Video,
+  Plus,
+  Trash2,
+  FolderOpen,
+  Clock,
+  HardDrive,
+} from "lucide-react";
+import "./HomePage.css";
 
 const api = window.electronAPI;
 
@@ -15,7 +22,7 @@ export function HomePage({ onNavigate }) {
       const list = await api.getRecordings();
       setRecordings(list || []);
     } catch (err) {
-      console.error('Failed to load recordings:', err);
+      console.error("Failed to load recordings:", err);
       setRecordings([]);
     } finally {
       setLoading(false);
@@ -31,7 +38,7 @@ export function HomePage({ onNavigate }) {
       await api.deleteRecording(sessionDir);
       setRecordings((prev) => prev.filter((r) => r.sessionDir !== sessionDir));
     } catch (err) {
-      console.error('Failed to delete recording:', err);
+      console.error("Failed to delete recording:", err);
     }
   };
 
@@ -47,7 +54,7 @@ export function HomePage({ onNavigate }) {
     const hours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
 
-    if (mins < 1) return 'Just now';
+    if (mins < 1) return "Just now";
     if (mins < 60) return `${mins}m ago`;
     if (hours < 24) return `${hours}h ago`;
     if (days < 7) return `${days}d ago`;
@@ -55,16 +62,16 @@ export function HomePage({ onNavigate }) {
   };
 
   const formatSize = (bytes) => {
-    if (!bytes) return '';
+    if (!bytes) return "";
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const formatDuration = (seconds) => {
-    if (!seconds) return '';
+    if (!seconds) return "";
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
-    return `${m}:${String(s).padStart(2, '0')}`;
+    return `${m}:${String(s).padStart(2, "0")}`;
   };
 
   return (
@@ -74,7 +81,10 @@ export function HomePage({ onNavigate }) {
           <h1>Recordings</h1>
           <span className="recording-count">{recordings.length}</span>
         </div>
-        <button className="btn-new-recording" onClick={() => onNavigate('record')}>
+        <button
+          className="btn-new-recording"
+          onClick={() => onNavigate("record")}
+        >
           <Plus size={16} />
           <span>New Recording</span>
         </button>
@@ -101,7 +111,9 @@ export function HomePage({ onNavigate }) {
               onClick={() => setSelectedRecording(rec)}
             >
               <div className="recording-info">
-                <span className="recording-name">{rec.name || 'Untitled Recording'}</span>
+                <span className="recording-name">
+                  {rec.name || "Untitled Recording"}
+                </span>
                 <div className="recording-meta">
                   <span className="meta-item">
                     <Clock size={11} />
@@ -125,7 +137,10 @@ export function HomePage({ onNavigate }) {
                 {rec.outputPath && (
                   <button
                     className="icon-btn"
-                    onClick={(e) => { e.stopPropagation(); handleOpen(rec.outputPath); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpen(rec.outputPath);
+                    }}
                     title="Show in folder"
                   >
                     <FolderOpen size={14} />
@@ -133,7 +148,10 @@ export function HomePage({ onNavigate }) {
                 )}
                 <button
                   className="icon-btn icon-btn-danger"
-                  onClick={(e) => { e.stopPropagation(); handleDelete(rec.sessionDir); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDelete(rec.sessionDir);
+                  }}
                   title="Delete recording"
                 >
                   <Trash2 size={14} />
@@ -145,11 +163,22 @@ export function HomePage({ onNavigate }) {
       </div>
 
       {selectedRecording && (
-        <div className="mini-player-modal" onClick={() => setSelectedRecording(null)}>
-          <div className="mini-player-content" onClick={(e) => e.stopPropagation()}>
+        <div
+          className="mini-player-modal"
+          onClick={() => setSelectedRecording(null)}
+        >
+          <div
+            className="mini-player-content"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="mini-player-header">
-              <strong>{selectedRecording.name || 'Recording'}</strong>
-              <button className="mini-player-close" onClick={() => setSelectedRecording(null)}>Close</button>
+              <strong>{selectedRecording.name || "Recording"}</strong>
+              <button
+                className="mini-player-close"
+                onClick={() => setSelectedRecording(null)}
+              >
+                Close
+              </button>
             </div>
             <video
               className="mini-player-video"
@@ -160,7 +189,6 @@ export function HomePage({ onNavigate }) {
           </div>
         </div>
       )}
-
     </div>
   );
 }

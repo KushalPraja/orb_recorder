@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Play, Trash2, Download, Check, Loader2 } from 'lucide-react';
-import './ReviewPage.css';
+import React, { useState, useRef, useEffect } from "react";
+import { Play, Trash2, Download, Check, Loader2 } from "lucide-react";
+import "./ReviewPage.css";
 
 const api = window.electronAPI;
 
@@ -63,7 +63,7 @@ export function ReviewPage({ data, onNavigate }) {
         await api.deleteRecording(data.sessionDir);
       } catch {}
     }
-    onNavigate('home');
+    onNavigate("home");
   };
 
   const handleOpen = () => {
@@ -71,7 +71,7 @@ export function ReviewPage({ data, onNavigate }) {
   };
 
   const formatSize = (bytes) => {
-    if (!bytes) return '';
+    if (!bytes) return "";
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
@@ -80,7 +80,7 @@ export function ReviewPage({ data, onNavigate }) {
       <div className="review-page">
         <div className="review-empty">
           <p>No recording to review</p>
-          <button className="btn-secondary" onClick={() => onNavigate('home')}>
+          <button className="btn-secondary" onClick={() => onNavigate("home")}>
             Go Home
           </button>
         </div>
@@ -98,20 +98,13 @@ export function ReviewPage({ data, onNavigate }) {
       </div>
 
       <div className="review-preview">
-        <video
-          ref={videoRef}
-          controls
-          className="review-video"
-        />
+        <video ref={videoRef} controls className="review-video" />
       </div>
 
       {processing && (
         <div className="review-progress">
           <div className="progress-track">
-            <div
-              className="progress-fill"
-              style={{ width: `${progress}%` }}
-            />
+            <div className="progress-fill" style={{ width: `${progress}%` }} />
           </div>
           <span className="progress-label">Processing... {progress}%</span>
         </div>
@@ -130,7 +123,10 @@ export function ReviewPage({ data, onNavigate }) {
               <Check size={14} />
               <span>Open Output</span>
             </button>
-            <button className="btn-secondary" onClick={() => onNavigate('home')}>
+            <button
+              className="btn-secondary"
+              onClick={() => onNavigate("home")}
+            >
               Done
             </button>
           </>

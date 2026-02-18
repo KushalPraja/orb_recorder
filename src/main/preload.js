@@ -1,34 +1,35 @@
 // Preload script — securely exposes main-process APIs to the renderer
 // via contextBridge. This is the ONLY way the renderer can talk to Node.js.
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer } = require("electron");
 
 const IPC = {
-  START_RECORDING: 'recording:start',
-  STOP_RECORDING: 'recording:stop',
-  SET_CAPTURE_SOURCE: 'recording:set-capture-source',
-  PREPARE_RECORDING_UI: 'recording:prepare-ui',
-  FINISH_RECORDING_UI: 'recording:finish-ui',
-  OVERLAY_STOP_REQUEST: 'recording:overlay-stop-request',
-  SAVE_RECORDING: 'recording:save',
-  GET_RECORDINGS: 'recordings:list',
-  DELETE_RECORDING: 'recordings:delete',
-  GET_SOURCES: 'sources:list',
-  PROCESS_VIDEO: 'video:process',
-  PROCESSING_PROGRESS: 'video:progress',
-  PROCESSING_DONE: 'video:done',
-  PROCESSING_ERROR: 'video:error',
-  GET_SETTINGS: 'settings:get',
-  SET_SETTINGS: 'settings:set',
-  PICK_OUTPUT_DIR: 'dialog:pickOutputDir',
-  OPEN_OUTPUT: 'shell:openOutput',
+  START_RECORDING: "recording:start",
+  STOP_RECORDING: "recording:stop",
+  SET_CAPTURE_SOURCE: "recording:set-capture-source",
+  PREPARE_RECORDING_UI: "recording:prepare-ui",
+  FINISH_RECORDING_UI: "recording:finish-ui",
+  OVERLAY_STOP_REQUEST: "recording:overlay-stop-request",
+  SAVE_RECORDING: "recording:save",
+  GET_RECORDINGS: "recordings:list",
+  DELETE_RECORDING: "recordings:delete",
+  GET_SOURCES: "sources:list",
+  PROCESS_VIDEO: "video:process",
+  PROCESSING_PROGRESS: "video:progress",
+  PROCESSING_DONE: "video:done",
+  PROCESSING_ERROR: "video:error",
+  GET_SETTINGS: "settings:get",
+  SET_SETTINGS: "settings:set",
+  PICK_OUTPUT_DIR: "dialog:pickOutputDir",
+  OPEN_OUTPUT: "shell:openOutput",
 };
 
-contextBridge.exposeInMainWorld('electronAPI', {
+contextBridge.exposeInMainWorld("electronAPI", {
   // ─── Recording ─────────────────────────────────────────────────
   startRecording: () => ipcRenderer.invoke(IPC.START_RECORDING),
   stopRecording: () => ipcRenderer.invoke(IPC.STOP_RECORDING),
-  setCaptureSource: (sourceId) => ipcRenderer.invoke(IPC.SET_CAPTURE_SOURCE, sourceId),
+  setCaptureSource: (sourceId) =>
+    ipcRenderer.invoke(IPC.SET_CAPTURE_SOURCE, sourceId),
   prepareRecordingUi: () => ipcRenderer.invoke(IPC.PREPARE_RECORDING_UI),
   finishRecordingUi: () => ipcRenderer.invoke(IPC.FINISH_RECORDING_UI),
   saveRecording: (buffer) => ipcRenderer.invoke(IPC.SAVE_RECORDING, buffer),
@@ -39,9 +40,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     return () => ipcRenderer.removeListener(IPC.OVERLAY_STOP_REQUEST, handler);
   },
 
-  // ─── Recordings Management ────────────────────────────────────
+  // ─── Recoding Fetching ────────────────────────────────────
   getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),
-  deleteRecording: (sessionDir) => ipcRenderer.invoke(IPC.DELETE_RECORDING, sessionDir),
+  deleteRecording: (sessionDir) =>
+    ipcRenderer.invoke(IPC.DELETE_RECORDING, sessionDir),
 
   // ─── Screen Sources ───────────────────────────────────────────
   getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),

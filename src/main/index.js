@@ -1,10 +1,10 @@
 // Main process entry — creates the BrowserWindow, sets up screen capture,
 // registers IPC handlers, and manages the app lifecycle.
 
-const { app, BrowserWindow, session, desktopCapturer } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const { registerIpcHandlers } = require('./ipc-handlers');
+const { app, BrowserWindow, session, desktopCapturer } = require("electron");
+const path = require("path");
+const fs = require("fs");
+const { registerIpcHandlers } = require("./ipc-handlers");
 
 let mainWindow = null;
 let selectedCaptureSourceId = null;
@@ -14,7 +14,7 @@ function setSelectedCaptureSource(sourceId) {
 }
 
 // Detect if running in dev mode (vite dev server)
-const isDev = process.argv.includes('--dev');
+const isDev = process.argv.includes("--dev");
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -23,17 +23,17 @@ function createWindow() {
     minWidth: 980,
     minHeight: 620,
     resizable: true,
-    title: 'Screen Recorder',
-    icon: path.join(__dirname, '..', '..', 'assets', 'icons', 'Document.ico'),
-    backgroundColor: '#0a0a0a',
-    titleBarStyle: 'hidden',
+    title: "Screen Recorder",
+    icon: path.join(__dirname, "..", "..", "assets", "icons", "Document.ico"),
+    backgroundColor: "#0a0a0a",
+    titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: '#0a0a0a',
-      symbolColor: '#888888',
+      color: "#0a0a0a",
+      symbolColor: "#888888",
       height: 32,
     },
     webPreferences: {
-      preload: path.join(__dirname, '..', 'main', 'preload.js'),
+      preload: path.join(__dirname, "..", "main", "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -42,15 +42,22 @@ function createWindow() {
   });
 
   // Load the renderer — use Vite dev server in dev, built files in prod
-  const distIndex = path.join(__dirname, '..', '..', 'dist', 'renderer', 'index.html');
-  const srcIndex = path.join(__dirname, '..', 'renderer', 'index.html');
+  const distIndex = path.join(
+    __dirname,
+    "..",
+    "..",
+    "dist",
+    "renderer",
+    "index.html",
+  );
+  const srcIndex = path.join(__dirname, "..", "renderer", "index.html");
 
   if (isDev) {
     // In dev mode, try Vite dev server first, fallback to src file
-    mainWindow.loadURL('http://localhost:5173').catch(() => {
+    mainWindow.loadURL("http://localhost:5173").catch(() => {
       mainWindow.loadFile(srcIndex);
     });
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
+    mainWindow.webContents.openDevTools({ mode: "detach" });
   } else if (fs.existsSync(distIndex)) {
     mainWindow.loadFile(distIndex);
   } else {
@@ -68,10 +75,10 @@ function createWindow() {
 
   session.defaultSession.setDisplayMediaRequestHandler(
     async (_request, callback) => {
-      console.log('[Main] Display media requested');
+      console.log("[Main] Display media requested");
       try {
         const sources = await desktopCapturer.getSources({
-          types: ['screen'],
+          types: ["screen"],
           thumbnailSize: { width: 150, height: 150 },
         });
         console.log(`[Main] Found ${sources.length} screen source(s)`);
@@ -81,23 +88,25 @@ function createWindow() {
             ? sources.find((source) => source.id === selectedCaptureSourceId)
             : null;
           const chosenSource = selected || sources[0];
-          console.log(`[Main] Granting access to: "${chosenSource.name}" (${chosenSource.id})`);
+          console.log(
+            `[Main] Granting access to: "${chosenSource.name}" (${chosenSource.id})`,
+          );
           callback({ video: chosenSource });
         } else {
-          console.error('[Main] No screen sources found');
+          console.error("[Main] No screen sources found");
           callback({});
         }
       } catch (err) {
-        console.error('[Main] Failed to get desktop sources:', err);
+        console.error("[Main] Failed to get desktop sources:", err);
         callback({});
       }
-    }
+    },
   );
 
   // Register IPC handlers
   registerIpcHandlers(mainWindow, setSelectedCaptureSource);
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     mainWindow = null;
   });
 }
@@ -107,23 +116,25 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   app.quit();
 });
 
 // Ensure uiohook is cleaned up on quit
-app.on('will-quit', () => {
+app.on("will-quit", () => {
   try {
-    const inputTracker = require('./input-tracker');
+    const inputTracker = require("./input-tracker");
     if (inputTracker.recording) {
       inputTracker.stop();
     }
-  } catch { /* already stopped */ }
+  } catch {
+    /* already stopped */
+  }
 });

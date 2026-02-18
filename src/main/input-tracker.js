@@ -1,8 +1,8 @@
 // Global mouse click + scroll tracker using uiohook-napi
 // Runs in the main process to capture events even when the app window is unfocused.
 
-const { uIOhook, UiohookKey } = require('uiohook-napi');
-const { SCROLL_COOLDOWN } = require('../shared/constants');
+const { uIOhook, UiohookKey } = require("uiohook-napi");
+const { SCROLL_COOLDOWN } = require("../shared/constants");
 
 class InputTracker {
   constructor() {
@@ -37,12 +37,12 @@ class InputTracker {
     this.recording = true;
     this._scrollAccumulator = 0;
 
-    uIOhook.on('click', this._onMouseClick);
-    uIOhook.on('wheel', this._onWheel);
-    uIOhook.on('mousemove', this._onMouseMove);
+    uIOhook.on("click", this._onMouseClick);
+    uIOhook.on("wheel", this._onWheel);
+    uIOhook.on("mousemove", this._onMouseMove);
     uIOhook.start();
 
-    console.log('[InputTracker] Started tracking');
+    console.log("[InputTracker] Started tracking");
   }
 
   /**
@@ -55,12 +55,14 @@ class InputTracker {
     // Flush any pending accumulated scroll
     this._flushScroll();
 
-    uIOhook.off('click', this._onMouseClick);
-    uIOhook.off('wheel', this._onWheel);
-    uIOhook.off('mousemove', this._onMouseMove);
+    uIOhook.off("click", this._onMouseClick);
+    uIOhook.off("wheel", this._onWheel);
+    uIOhook.off("mousemove", this._onMouseMove);
     uIOhook.stop();
 
-    console.log(`[InputTracker] Stopped — captured ${this.events.length} events`);
+    console.log(
+      `[InputTracker] Stopped — captured ${this.events.length} events`,
+    );
     return this.events;
   }
 
@@ -79,15 +81,17 @@ class InputTracker {
     const timestamp = (Date.now() - this.startTime) / 1000; // seconds into recording
 
     this.events.push({
-      type: 'click',
+      type: "click",
       x: e.x,
       y: e.y,
-      button: e.button,      // 1 = left, 2 = right, 3 = middle
+      button: e.button, // 1 = left, 2 = right, 3 = middle
       clicks: e.clicks || 1, // single vs double click
       timestamp,
     });
 
-    console.log(`[InputTracker] Click at (${e.x}, ${e.y}) t=${timestamp.toFixed(2)}s`);
+    console.log(
+      `[InputTracker] Click at (${e.x}, ${e.y}) t=${timestamp.toFixed(2)}s`,
+    );
   }
 
   _onMouseMove(e) {
@@ -100,7 +104,7 @@ class InputTracker {
     const timestamp = (now - this.startTime) / 1000;
 
     this.events.push({
-      type: 'move',
+      type: "move",
       x: e.x,
       y: e.y,
       timestamp,
@@ -122,7 +126,10 @@ class InputTracker {
 
       // Reset the flush timer
       if (this._scrollTimer) clearTimeout(this._scrollTimer);
-      this._scrollTimer = setTimeout(() => this._flushScroll(), SCROLL_COOLDOWN * 1000);
+      this._scrollTimer = setTimeout(
+        () => this._flushScroll(),
+        SCROLL_COOLDOWN * 1000,
+      );
       return;
     }
 
@@ -134,7 +141,10 @@ class InputTracker {
     this._lastScrollY = e.y;
     this._lastScrollTime = now;
 
-    this._scrollTimer = setTimeout(() => this._flushScroll(), SCROLL_COOLDOWN * 1000);
+    this._scrollTimer = setTimeout(
+      () => this._flushScroll(),
+      SCROLL_COOLDOWN * 1000,
+    );
   }
 
   _flushScroll() {
@@ -149,17 +159,17 @@ class InputTracker {
     const timestamp = (this._lastScrollTime - this.startTime) / 1000;
 
     this.events.push({
-      type: 'scroll',
+      type: "scroll",
       x: this._lastScrollX,
       y: this._lastScrollY,
-      rotation: this._scrollAccumulator,  // positive = down, negative = up
-      direction: 'vertical',
+      rotation: this._scrollAccumulator, // positive = down, negative = up
+      direction: "vertical",
       timestamp,
     });
 
     console.log(
       `[InputTracker] Scroll at (${this._lastScrollX}, ${this._lastScrollY})` +
-      ` rotation=${this._scrollAccumulator} t=${timestamp.toFixed(2)}s`
+        ` rotation=${this._scrollAccumulator} t=${timestamp.toFixed(2)}s`,
     );
 
     this._scrollAccumulator = 0;

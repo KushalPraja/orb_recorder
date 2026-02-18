@@ -1,11 +1,18 @@
 // IPC Handlers — bridge between renderer UI and backend modules.
 // Registered in the main process.
 
-const { ipcMain, dialog, shell, BrowserWindow, screen, desktopCapturer } = require('electron');
-const fs = require('fs');
-const path = require('path');
-const inputTracker = require('./input-tracker');
-const { processVideo } = require('./post-processor');
+const {
+  ipcMain,
+  dialog,
+  shell,
+  BrowserWindow,
+  screen,
+  desktopCapturer,
+} = require("electron");
+const fs = require("fs");
+const path = require("path");
+const inputTracker = require("./input-tracker");
+const { processVideo } = require("./post-processor");
 const {
   IPC,
   DEFAULT_FPS,
@@ -16,13 +23,13 @@ const {
   EVENTS_FILE,
   OUTPUT_FILE,
   SETTINGS_FILE,
-} = require('../shared/constants');
+} = require("../shared/constants");
 
 // ─── Persistent Settings ────────────────────────────────────────────
 
 function getSettingsPath() {
-  const { app } = require('electron');
-  return path.join(app.getPath('userData'), SETTINGS_FILE);
+  const { app } = require("electron");
+  return path.join(app.getPath("userData"), SETTINGS_FILE);
 }
 
 function loadSettings() {
@@ -36,11 +43,11 @@ function loadSettings() {
   try {
     const filePath = getSettingsPath();
     if (fs.existsSync(filePath)) {
-      const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+      const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
       return { ...defaults, ...data };
     }
   } catch (err) {
-    console.error('[Settings] Failed to load settings:', err);
+    console.error("[Settings] Failed to load settings:", err);
   }
   return defaults;
 }
@@ -50,7 +57,7 @@ function saveSettings(settings) {
     const filePath = getSettingsPath();
     fs.writeFileSync(filePath, JSON.stringify(settings, null, 2));
   } catch (err) {
-    console.error('[Settings] Failed to save settings:', err);
+    console.error("[Settings] Failed to save settings:", err);
   }
 }
 
@@ -84,7 +91,7 @@ function showCountdownOverlay(seconds = 3) {
       },
     });
 
-    overlay.setAlwaysOnTop(true, 'screen-saver');
+    overlay.setAlwaysOnTop(true, "screen-saver");
     overlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     overlay.setIgnoreMouseEvents(true);
 
@@ -122,7 +129,7 @@ function showCountdownOverlay(seconds = 3) {
     </html>`;
 
     overlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-    overlay.on('closed', () => resolve());
+    overlay.on("closed", () => resolve());
   });
 }
 
@@ -156,8 +163,10 @@ function showRecordingOverlay(mainWindow) {
     },
   });
 
-  recordingOverlay.setAlwaysOnTop(true, 'screen-saver');
-  recordingOverlay.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  recordingOverlay.setAlwaysOnTop(true, "screen-saver");
+  recordingOverlay.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+  });
 
   const html = `<!DOCTYPE html>
   <html>
@@ -199,8 +208,10 @@ function showRecordingOverlay(mainWindow) {
   </body>
   </html>`;
 
-  recordingOverlay.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-  recordingOverlay.on('closed', () => {
+  recordingOverlay.loadURL(
+    `data:text/html;charset=utf-8,${encodeURIComponent(html)}`,
+  );
+  recordingOverlay.on("closed", () => {
     recordingOverlay = null;
   });
 
@@ -219,7 +230,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
   // ─── Recording Control ────────────────────────────────────────────
 
   ipcMain.handle(IPC.SET_CAPTURE_SOURCE, async (_event, sourceId) => {
-    if (typeof setSelectedCaptureSource === 'function') {
+    if (typeof setSelectedCaptureSource === "function") {
       setSelectedCaptureSource(sourceId);
     }
     return true;
@@ -229,7 +240,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     const timestamp = Date.now();
 
     // Create a session directory for this recording
-    const sessionId = new Date(timestamp).toISOString().replace(/[:.]/g, '-');
+    const sessionId = new Date(timestamp).toISOString().replace(/[:.]/g, "-");
     const sessionDir = path.join(settings.outputDir, sessionId);
     fs.mkdirSync(sessionDir, { recursive: true });
 
@@ -249,7 +260,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
 
   ipcMain.handle(IPC.STOP_RECORDING, async () => {
     if (!recordingSession) {
-      throw new Error('No active recording session');
+      throw new Error("No active recording session");
     }
 
     // Stop input tracking and get events
@@ -288,8 +299,8 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     return true;
   });
 
-  ipcMain.removeAllListeners('recording:overlay-stop-clicked');
-  ipcMain.on('recording:overlay-stop-clicked', () => {
+  ipcMain.removeAllListeners("recording:overlay-stop-clicked");
+  ipcMain.on("recording:overlay-stop-clicked", () => {
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send(IPC.OVERLAY_STOP_REQUEST);
     }
@@ -299,22 +310,25 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
 
   ipcMain.handle(IPC.SAVE_RECORDING, async (_event, buffer) => {
     if (!recordingSession) {
-      throw new Error('No active recording session');
+      throw new Error("No active recording session");
     }
 
     const filePath = path.join(recordingSession.sessionDir, RAW_RECORDING_FILE);
     fs.writeFileSync(filePath, Buffer.from(buffer));
 
-    console.log(`[IPC] Recording saved: ${filePath} (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+    console.log(
+      `[IPC] Recording saved: ${filePath} (${(buffer.byteLength / 1024 / 1024).toFixed(1)} MB)`,
+    );
     return filePath;
   });
 
   // ─── Post-Processing ──────────────────────────────────────────────
 
   ipcMain.handle(IPC.PROCESS_VIDEO, async (_event, opts = {}) => {
-    const sessionDir = opts.sessionDir || (recordingSession && recordingSession.sessionDir);
+    const sessionDir =
+      opts.sessionDir || (recordingSession && recordingSession.sessionDir);
     if (!sessionDir) {
-      throw new Error('No recording session to process');
+      throw new Error("No recording session to process");
     }
 
     try {
@@ -344,7 +358,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
   ipcMain.handle(IPC.SET_SETTINGS, async (_event, newSettings) => {
     settings = { ...settings, ...newSettings };
     saveSettings(settings);
-    console.log('[IPC] Settings updated:', settings);
+    console.log("[IPC] Settings updated:", settings);
     return settings;
   });
 
@@ -352,9 +366,9 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
 
   ipcMain.handle(IPC.PICK_OUTPUT_DIR, async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
-      title: 'Choose Output Directory',
+      title: "Choose Output Directory",
       defaultPath: settings.outputDir,
-      properties: ['openDirectory', 'createDirectory'],
+      properties: ["openDirectory", "createDirectory"],
     });
 
     if (!result.canceled && result.filePaths.length > 0) {
@@ -378,7 +392,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
   ipcMain.handle(IPC.GET_SOURCES, async () => {
     try {
       const sources = await desktopCapturer.getSources({
-        types: ['screen'],
+        types: ["screen"],
         thumbnailSize: { width: 320, height: 200 },
       });
 
@@ -388,7 +402,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
         thumbnail: src.thumbnail.toDataURL(),
       }));
     } catch (err) {
-      console.error('[IPC] Failed to get sources:', err);
+      console.error("[IPC] Failed to get sources:", err);
       return [];
     }
   });
@@ -430,7 +444,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
       recordings.sort((a, b) => b.timestamp - a.timestamp);
       return recordings;
     } catch (err) {
-      console.error('[IPC] Failed to list recordings:', err);
+      console.error("[IPC] Failed to list recordings:", err);
       return [];
     }
   });
@@ -443,7 +457,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
       }
       return true;
     } catch (err) {
-      console.error('[IPC] Failed to delete recording:', err);
+      console.error("[IPC] Failed to delete recording:", err);
       throw err;
     }
   });

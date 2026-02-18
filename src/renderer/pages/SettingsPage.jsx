@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
-import { FolderOpen } from 'lucide-react';
-import './SettingsPage.css';
+import React, { useState, useEffect } from "react";
+import { FolderOpen } from "lucide-react";
+import "./SettingsPage.css";
 
 const api = window.electronAPI;
 
@@ -9,7 +9,7 @@ export function SettingsPage({ onNavigate }) {
     fps: 30,
     zoomFactor: 2.0,
     zoomDuration: 1.5,
-    outputDir: '',
+    outputDir: "",
   });
   const [saved, setSaved] = useState(false);
 
@@ -19,7 +19,7 @@ export function SettingsPage({ onNavigate }) {
         const s = await api.getSettings();
         setSettings(s);
       } catch (err) {
-        console.error('Failed to load settings:', err);
+        console.error("Failed to load settings:", err);
       }
     })();
   }, []);
@@ -40,9 +40,9 @@ export function SettingsPage({ onNavigate }) {
   };
 
   const shortenPath = (p) => {
-    if (!p) return '—';
+    if (!p) return "—";
     const parts = p.split(/[/\\]/);
-    if (parts.length > 3) return `.../${parts.slice(-2).join('/')}`;
+    if (parts.length > 3) return `.../${parts.slice(-2).join("/")}`;
     return p;
   };
 
@@ -65,7 +65,7 @@ export function SettingsPage({ onNavigate }) {
             <select
               className="setting-select"
               value={settings.fps}
-              onChange={(e) => update('fps', parseInt(e.target.value, 10))}
+              onChange={(e) => update("fps", parseInt(e.target.value, 10))}
             >
               <option value={15}>15 fps</option>
               <option value={24}>24 fps</option>
@@ -95,7 +95,9 @@ export function SettingsPage({ onNavigate }) {
           <div className="setting-row">
             <div className="setting-label">
               <span>Zoom Level</span>
-              <span className="setting-value">{settings.zoomFactor.toFixed(1)}x</span>
+              <span className="setting-value">
+                {settings.zoomFactor.toFixed(1)}x
+              </span>
             </div>
             <input
               type="range"
@@ -104,14 +106,16 @@ export function SettingsPage({ onNavigate }) {
               max="3"
               step="0.1"
               value={settings.zoomFactor}
-              onChange={(e) => update('zoomFactor', parseFloat(e.target.value))}
+              onChange={(e) => update("zoomFactor", parseFloat(e.target.value))}
             />
           </div>
 
           <div className="setting-row">
             <div className="setting-label">
               <span>Hold Duration</span>
-              <span className="setting-value">{settings.zoomDuration.toFixed(1)}s</span>
+              <span className="setting-value">
+                {settings.zoomDuration.toFixed(1)}s
+              </span>
             </div>
             <input
               type="range"
@@ -120,7 +124,9 @@ export function SettingsPage({ onNavigate }) {
               max="3"
               step="0.1"
               value={settings.zoomDuration}
-              onChange={(e) => update('zoomDuration', parseFloat(e.target.value))}
+              onChange={(e) =>
+                update("zoomDuration", parseFloat(e.target.value))
+              }
             />
           </div>
         </div>
