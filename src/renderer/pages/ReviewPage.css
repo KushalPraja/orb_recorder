@@ -27,7 +27,8 @@
 }
 
 .rv-header h2 {
-  font-size: 11px; /* unified with sidebar */
+  font-size: 11px;
+  /* unified with sidebar */
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.04em;
@@ -95,7 +96,8 @@
 /* Absolute image layer for image-type backgrounds */
 .rv-preview-bg-image {
   position: absolute;
-  inset: -30px; /* overscan so blur doesn't show edges */
+  inset: -30px;
+  /* overscan so blur doesn't show edges */
   background-size: cover;
   background-position: center;
   z-index: 0;
@@ -753,9 +755,11 @@
 
 /* ── Panel footer (actions moved into the right sidebar) ────────── */
 .rv-panel-footer {
-  margin-top: auto; /* push to bottom of the .rv-panel */
+  margin-top: auto;
+  /* push to bottom of the .rv-panel */
   padding: 12px;
-  border-top: none; /* removed separator line per request */
+  border-top: none;
+  /* removed separator line per request */
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -765,14 +769,18 @@
 .rv-panel-footer .rv-btn {
   width: 100%;
   padding: 10px 12px;
-  font-size: 11px; /* unified with sidebar */
+  font-size: 11px;
+  /* unified with sidebar */
   font-weight: 600;
-  border-radius: 0; /* flat — match sidebar aesthetic */
+  border-radius: 0;
+  /* flat — match sidebar aesthetic */
   justify-content: center;
   text-transform: none;
   border: 1px solid var(--border);
-  background: var(--bg-tertiary); /* neutral gray */
-  color: var(--text-primary); /* white/neutral */
+  background: var(--bg-tertiary);
+  /* neutral gray */
+  color: var(--text-primary);
+  /* white/neutral */
 }
 
 /* primary / secondary / danger variants inside the sidebar footer (monochrome) */
@@ -807,7 +815,8 @@
 
 .rv-panel-footer .rv-btn--danger:hover:not(:disabled) {
   background: var(--bg-secondary);
-  color: var(--text-tertiary); /* keep monochrome on hover */
+  color: var(--text-tertiary);
+  /* keep monochrome on hover */
   border-color: var(--border-hover);
 }
 
@@ -876,7 +885,8 @@
   gap: 12px;
   flex: 1;
   color: var(--text-tertiary);
-  font-size: 11px; /* unified with sidebar */
+  font-size: 11px;
+  /* unified with sidebar */
 }
 
 .review-loading {
@@ -893,7 +903,8 @@
 }
 
 .review-loading p {
-  font-size: 11px; /* unified with sidebar */
+  font-size: 11px;
+  /* unified with sidebar */
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -907,10 +918,22 @@
 
 .rv-bg-type-selector {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0;
   border: 1px solid var(--border);
   overflow: hidden;
+}
+
+/* ─── Background sub-panel (collapsible) ─────────────────────────── */
+
+.rv-bg-sub {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.22s ease;
+}
+
+.rv-bg-sub.open {
+  max-height: 700px;
 }
 
 .rv-bg-type-btn {

@@ -24,7 +24,7 @@ const {
   SETTINGS_FILE,
 } = require("../shared/constants");
 
-// ─── Persistent Settings ────────────────────────────────────────────
+// ─── Helper Functions ────────────────────────────────────────────
 
 function getSettingsPath() {
   const { app } = require("electron");
@@ -226,7 +226,6 @@ function showRecordingOverlay(_mainWindow) {
  * @param {BrowserWindow} mainWindow  The main app window
  */
 function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
-  // ─── Recording Control ────────────────────────────────────────────
 
   ipcMain.handle(IPC.SET_CAPTURE_SOURCE, async (_event, sourceId) => {
     if (typeof setSelectedCaptureSource === "function") {

@@ -22,13 +22,13 @@ const api = window.electronAPI;
 
 const GRADIENT_PRESETS = [
   { name: "Graphite", start: "#1a1a1a", end: "#0f0f0f" },
-  { name: "Steel",    start: "#2a2a2a", end: "#111111" },
+  { name: "Steel", start: "#2a2a2a", end: "#111111" },
   { name: "Charcoal", start: "#232323", end: "#161616" },
-  { name: "Ocean",    start: "#0f2027", end: "#203a43" },
-  { name: "Violet",   start: "#16001e", end: "#30115e" },
-  { name: "Forest",   start: "#0a1a0f", end: "#1a3a1f" },
-  { name: "Dusk",     start: "#1a0a1a", end: "#3a102a" },
-  { name: "Ember",    start: "#1a0a00", end: "#2d1200" },
+  { name: "Ocean", start: "#0f2027", end: "#203a43" },
+  { name: "Violet", start: "#16001e", end: "#30115e" },
+  { name: "Forest", start: "#0a1a0f", end: "#1a3a1f" },
+  { name: "Dusk", start: "#1a0a1a", end: "#3a102a" },
+  { name: "Ember", start: "#1a0a00", end: "#2d1200" },
 ];
 
 const COLOR_PRESETS = [
@@ -380,7 +380,8 @@ export function ReviewPage({ data, onNavigate }) {
 
   /* state — export options */
   const [autoZoom, setAutoZoom] = useState(false);
-  // bgType: 'none' | 'color' | 'gradient' | 'image'
+  // bgEnabled toggles background on/off; bgType: 'color' | 'gradient' | 'image'
+  const [bgEnabled, setBgEnabled] = useState(true);
   const [bgType, setBgType] = useState("gradient");
   const [bgColor, setBgColor] = useState("#1e293b");
   const [gradientIdx, setGradientIdx] = useState(0);
@@ -504,18 +505,18 @@ export function ReviewPage({ data, onNavigate }) {
     const exportOpts = {
       sessionDir: data.sessionDir,
       autoZoom,
-      background: bgType !== "none",
-      cornerRadius: bgType !== "none" ? cornerRadius : 0,
-      padding: bgType !== "none" ? padding : 0,
+      background: bgEnabled,
+      cornerRadius: bgEnabled ? cornerRadius : 0,
+      padding: bgEnabled ? padding : 0,
       backgroundType:
-        bgType === "color"     ? "solid"    :
-        bgType === "gradient"  ? "gradient" :
-        bgType === "image"     ? "image"    : "none",
-      backgroundColor: bgType === "color" ? bgColor : undefined,
-      gradientStart: bgType === "gradient" ? gradient.start : undefined,
-      gradientEnd:   bgType === "gradient" ? gradient.end   : undefined,
-      wallpaperFile: bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
-      imageBlur:     bgType === "image" ? imageBlur : "none",
+        !bgEnabled ? "none" :
+          bgType === "color" ? "solid" :
+            bgType === "gradient" ? "gradient" : "image",
+      backgroundColor: bgEnabled && bgType === "color" ? bgColor : undefined,
+      gradientStart: bgEnabled && bgType === "gradient" ? gradient.start : undefined,
+      gradientEnd: bgEnabled && bgType === "gradient" ? gradient.end : undefined,
+      wallpaperFile: bgEnabled && bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
+      imageBlur: bgEnabled && bgType === "image" ? imageBlur : "none",
       ...(isTrimmed && { trimStart, trimEnd }),
     };
 
@@ -542,10 +543,11 @@ export function ReviewPage({ data, onNavigate }) {
 
   /* ─── Preview background CSS ─────────────────────────────────────── */
   const previewCanvasBg =
-    bgType === "color"    ? bgColor :
-    bgType === "gradient" ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` :
-    bgType === "image"    ? "transparent" :
-    "var(--bg-secondary)";
+    !bgEnabled ? "var(--bg-secondary)" :
+      bgType === "color" ? bgColor :
+        bgType === "gradient" ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` :
+          bgType === "image" ? "transparent" :
+            "var(--bg-secondary)";
 
   const blurPx = imageBlur === "moderate" ? 10 : imageBlur === "strong" ? 24 : 0;
 
@@ -612,7 +614,7 @@ export function ReviewPage({ data, onNavigate }) {
           {/* Video preview */}
           <div className="rv-preview-wrap">
             {/* Blurred image background layer */}
-            {bgType === "image" && (
+            {bgEnabled && bgType === "image" && (
               <div
                 className="rv-preview-bg-image"
                 style={{
@@ -625,16 +627,14 @@ export function ReviewPage({ data, onNavigate }) {
               className="rv-preview-canvas"
               style={{
                 background: previewCanvasBg,
-                padding: bgType !== "none"
-                  ? `${Math.round(padding / 4)}px`
-                  : 0,
+                padding: bgEnabled ? `${Math.round(padding / 4)}px` : 0,
               }}
             >
               <video
                 ref={videoRef}
                 className="rv-video"
                 style={{
-                  borderRadius: bgType !== "none" ? `${cornerRadius}px` : 0,
+                  borderRadius: bgEnabled ? `${cornerRadius}px` : 0,
                 }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
@@ -710,140 +710,154 @@ export function ReviewPage({ data, onNavigate }) {
                 </label>
               </div>
             </div>
-
-            {/* ── Background section ────────────────────────────── */}
-            <div className="rv-section-header">
-              <Layers size={9} />
-              <span>Background</span>
-            </div>
+            
+            
             <div className="rv-section-body">
-              {/* Type selector */}
-              <div className="rv-field">
-                <span className="rv-field-label">Type</span>
-                <div className="rv-bg-type-selector">
-                  {["none", "color", "gradient", "image"].map((t) => (
-                    <button
-                      key={t}
-                      className={`rv-bg-type-btn ${bgType === t ? "active" : ""}`}
-                      onClick={() => setBgType(t)}
-                    >
-                      {t === "none" ? "None" : t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
-                    </button>
-                  ))}
+              {/* Toggle row — same pattern as Auto-Zoom */}
+              <div className="rv-option-row">
+                <div className="rv-option-info">
+                  <Layers size={12} className="rv-option-icon" />
+                  <div className="rv-option-text">
+                    <span className="rv-option-name">Background</span>
+                    <span className="rv-option-desc">Add canvas behind video</span>
+                  </div>
                 </div>
+                <label className="rv-toggle">
+                  <input
+                    type="checkbox"
+                    checked={bgEnabled}
+                    onChange={(e) => setBgEnabled(e.target.checked)}
+                  />
+                  <span className="rv-toggle-track" />
+                </label>
               </div>
 
-              {/* Color picker */}
-              {bgType === "color" && (
+              {/* Collapsible sub-panel — only shown when enabled */}
+              <div className={`rv-bg-sub ${bgEnabled ? "open" : ""}`}>
+                {/* Type selector — 3 options only */}
                 <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Color</span>
-                    <input
-                      type="color"
-                      value={bgColor}
-                      onChange={(e) => setBgColor(e.target.value)}
-                      className="rv-color-input"
-                    />
-                  </div>
-                  <div className="rv-swatches">
-                    {COLOR_PRESETS.map((c, i) => (
+                  <span className="rv-field-label">Style</span>
+                  <div className="rv-bg-type-selector">
+                    {["color", "gradient", "image"].map((t) => (
                       <button
-                        key={i}
-                        className={`rv-swatch ${bgColor === c ? "active" : ""}`}
-                        style={{ background: c }}
-                        title={c}
-                        onClick={() => setBgColor(c)}
-                      />
+                        key={t}
+                        className={`rv-bg-type-btn ${bgType === t ? "active" : ""}`}
+                        onClick={() => setBgType(t)}
+                      >
+                        {t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
+                      </button>
                     ))}
                   </div>
                 </div>
-              )}
 
-              {/* Gradient presets */}
-              {bgType === "gradient" && (
-                <div className="rv-field">
-                  <span className="rv-field-label">Preset</span>
-                  <div className="rv-swatches">
-                    {GRADIENT_PRESETS.map((g, i) => (
-                      <button
-                        key={i}
-                        className={`rv-swatch ${gradientIdx === i ? "active" : ""}`}
-                        style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
-                        title={g.name}
-                        onClick={() => setGradientIdx(i)}
-                      />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Image wallpaper picker */}
-              {bgType === "image" && (
-                <>
+                {/* Color picker */}
+                {bgType === "color" && (
                   <div className="rv-field">
-                    <span className="rv-field-label">Wallpaper</span>
-                    <div className="rv-wallpaper-grid">
-                      {WALLPAPERS.map((w, i) => (
+                    <div className="rv-field-header">
+                      <span className="rv-field-label">Color</span>
+                      <input
+                        type="color"
+                        value={bgColor}
+                        onChange={(e) => setBgColor(e.target.value)}
+                        className="rv-color-input"
+                      />
+                    </div>
+                    <div className="rv-swatches">
+                      {COLOR_PRESETS.map((c, i) => (
                         <button
                           key={i}
-                          className={`rv-wallpaper-thumb ${wallpaperIdx === i ? "active" : ""}`}
-                          style={{ backgroundImage: `url(./Wallpapers/${w})` }}
-                          title={w.replace(/-thumb\.(jpg|jpeg)$/i, "").replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
-                          onClick={() => setWallpaperIdx(i)}
+                          className={`rv-swatch ${bgColor === c ? "active" : ""}`}
+                          style={{ background: c }}
+                          title={c}
+                          onClick={() => setBgColor(c)}
                         />
                       ))}
                     </div>
                   </div>
+                )}
+
+                {/* Gradient presets */}
+                {bgType === "gradient" && (
                   <div className="rv-field">
-                    <span className="rv-field-label">Blur</span>
-                    <div className="rv-blur-options">
-                      {["none", "moderate", "strong"].map((b) => (
+                    <span className="rv-field-label">Preset</span>
+                    <div className="rv-swatches">
+                      {GRADIENT_PRESETS.map((g, i) => (
                         <button
-                          key={b}
-                          className={`rv-blur-btn ${imageBlur === b ? "active" : ""}`}
-                          onClick={() => setImageBlur(b)}
-                        >
-                          {b.charAt(0).toUpperCase() + b.slice(1)}
-                        </button>
+                          key={i}
+                          className={`rv-swatch ${gradientIdx === i ? "active" : ""}`}
+                          style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
+                          title={g.name}
+                          onClick={() => setGradientIdx(i)}
+                        />
                       ))}
                     </div>
                   </div>
-                </>
-              )}
+                )}
 
-              {/* Radius + Padding — shown whenever bg is enabled */}
-              {bgType !== "none" && (
-                <>
-                  <div className="rv-field">
-                    <div className="rv-field-header">
-                      <span className="rv-field-label">Radius</span>
-                      <span className="rv-field-value">{cornerRadius}px</span>
+                {/* Image wallpaper picker */}
+                {bgType === "image" && (
+                  <>
+                    <div className="rv-field">
+                      <span className="rv-field-label">Wallpaper</span>
+                      <div className="rv-wallpaper-grid">
+                        {WALLPAPERS.map((w, i) => (
+                          <button
+                            key={i}
+                            className={`rv-wallpaper-thumb ${wallpaperIdx === i ? "active" : ""}`}
+                            style={{ backgroundImage: `url(./Wallpapers/${w})` }}
+                            title={w.replace(/-thumb\.(jpg|jpeg)$/i, "").replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
+                            onClick={() => setWallpaperIdx(i)}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={32}
-                      value={cornerRadius}
-                      onChange={(e) => setCornerRadius(Number(e.target.value))}
-                      className="rv-slider"
-                    />
-                  </div>
-                  <div className="rv-field">
-                    <div className="rv-field-header">
-                      <span className="rv-field-label">Padding</span>
-                      <span className="rv-field-value">{padding}px</span>
+                    <div className="rv-field">
+                      <span className="rv-field-label">Blur</span>
+                      <div className="rv-blur-options">
+                        {["none", "moderate", "strong"].map((b) => (
+                          <button
+                            key={b}
+                            className={`rv-blur-btn ${imageBlur === b ? "active" : ""}`}
+                            onClick={() => setImageBlur(b)}
+                          >
+                            {b.charAt(0).toUpperCase() + b.slice(1)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <input
-                      type="range"
-                      min={16}
-                      max={120}
-                      value={padding}
-                      onChange={(e) => setPadding(Number(e.target.value))}
-                      className="rv-slider"
-                    />
+                  </>
+                )}
+
+                {/* Radius + Padding */}
+                <div className="rv-field">
+                  <div className="rv-field-header">
+                    <span className="rv-field-label">Radius</span>
+                    <span className="rv-field-value">{cornerRadius}px</span>
                   </div>
-                </>
-              )}
+                  <input
+                    type="range"
+                    min={0}
+                    max={32}
+                    value={cornerRadius}
+                    onChange={(e) => setCornerRadius(Number(e.target.value))}
+                    className="rv-slider"
+                  />
+                </div>
+                <div className="rv-field">
+                  <div className="rv-field-header">
+                    <span className="rv-field-label">Padding</span>
+                    <span className="rv-field-value">{padding}px</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={16}
+                    max={120}
+                    value={padding}
+                    onChange={(e) => setPadding(Number(e.target.value))}
+                    className="rv-slider"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Panel footer — actions moved into sidebar */}
