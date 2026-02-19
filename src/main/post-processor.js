@@ -77,7 +77,21 @@ function getScriptPath() {
 /* ─── Run the Python / binary auto-zoom processor ──────────────────── */
 
 function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
-  const { zoom = 2.0, hold = 1.5, onProgress } = opts;
+  const {
+    zoom = 2.0,
+    hold = 1.5,
+    onProgress,
+    // Background compositing (composite-first zoom)
+    withBackground = false,
+    padding = 48,
+    cornerRadius = 12,
+    backgroundType = "solid",
+    backgroundColor = "#6366f1",
+    gradientStart = "#667eea",
+    gradientEnd = "#764ba2",
+    wallpaperPath = null,
+    imageBlur = "none",
+  } = opts;
 
   const ffmpegBin = getFfmpegPath();
   const processorBinPath = getProcessorBinaryPath();
@@ -89,6 +103,28 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
       new Error("Auto-zoom processor not found (checked binary and script)."),
     );
   }
+
+  // Background flags — only appended when compositing is requested
+  const bgArgs = withBackground
+    ? [
+        "--background",
+        "--padding",
+        String(padding),
+        "--corner-radius",
+        String(cornerRadius),
+        "--bg-type",
+        backgroundType,
+        "--bg-color",
+        backgroundColor,
+        "--gradient-start",
+        gradientStart,
+        "--gradient-end",
+        gradientEnd,
+        "--image-blur",
+        imageBlur,
+        ...(wallpaperPath ? ["--wallpaper", wallpaperPath] : []),
+      ]
+    : [];
 
   const command = processorBinPath || pythonBin;
   const args = processorBinPath
@@ -102,6 +138,7 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
         String(hold),
         "--ffmpeg",
         ffmpegBin,
+        ...bgArgs,
       ]
     : [
         scriptPath,
@@ -114,6 +151,7 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
         String(hold),
         "--ffmpeg",
         ffmpegBin,
+        ...bgArgs,
       ];
 
   return new Promise((resolve, reject) => {
@@ -269,13 +307,21 @@ async function processVideo(opts) {
     }
   }
 
-  // ── Phase 2: Auto-zoom (optional, 40-70%) ─────────────────────────
+  // ── Phase 2: Auto-zoom (optional, 40-95%) ────────────────────────
+  // When background is also requested, Python handles compositing inside
+  // the same frame loop (composite-first zoom) — Phase 3 is skipped.
   if (autoZoom) {
     const zoomOut = path.join(recordingDir, "__intermediate_zoom.mp4");
     intermediates.push(zoomOut);
 
-    if (onProgress) onProgress({ percent: 40, phase: "Applying auto-zoom…" });
-    console.log(`[PostProcessor] Auto-zoom → ${zoomOut}`);
+    const phaseLabel = background
+      ? "Applying zoom + background…"
+      : "Applying auto-zoom…";
+
+    if (onProgress) onProgress({ percent: 40, phase: phaseLabel });
+    console.log(
+      `[PostProcessor] Auto-zoom${background ? " + background" : ""} → ${zoomOut}`,
+    );
 
     try {
       await runPythonProcessor(currentInput, eventsPath, zoomOut, {
@@ -284,11 +330,21 @@ async function processVideo(opts) {
         onProgress: (pct) => {
           if (onProgress) {
             onProgress({
-              percent: Math.min(70, 40 + Math.round(pct * 0.3)),
-              phase: "Applying auto-zoom…",
+              percent: Math.min(95, 40 + Math.round(pct * 0.55)),
+              phase: phaseLabel,
             });
           }
         },
+        // Pass background opts so Python composites in the same pass
+        withBackground: background,
+        padding,
+        cornerRadius,
+        backgroundType,
+        backgroundColor,
+        gradientStart,
+        gradientEnd,
+        wallpaperPath,
+        imageBlur,
       });
       currentInput = zoomOut;
     } catch (err) {
@@ -297,17 +353,13 @@ async function processVideo(opts) {
     }
   }
 
-  // ── Phase 3: Visual polish (optional, 70-95%) ─────────────────────
-  if (background) {
-    const visualOut = autoZoom
-      ? path.join(recordingDir, "__intermediate_visual.mp4")
-      : outPath; // write directly to final if no zoom step
-    if (autoZoom) intermediates.push(visualOut);
+  // ── Phase 3: Visual polish (optional, 40-95%) ─────────────────────
+  // Only runs when background is requested WITHOUT auto-zoom.
+  // When autoZoom is also true, Python already composited in Phase 2.
+  if (background && !autoZoom) {
+    const visualOut = outPath; // write directly to final (no zoom step)
 
-    const phaseStart = autoZoom ? 70 : 40;
-    const phaseEnd = 95;
-    if (onProgress)
-      onProgress({ percent: phaseStart, phase: "Applying background…" });
+    if (onProgress) onProgress({ percent: 40, phase: "Applying background…" });
     console.log(`[PostProcessor] Visual export → ${visualOut}`);
 
     try {
@@ -327,11 +379,7 @@ async function processVideo(opts) {
         (p) => {
           if (onProgress && Number.isFinite(p.percent)) {
             onProgress({
-              percent: Math.min(
-                phaseEnd,
-                phaseStart +
-                  Math.round((p.percent * (phaseEnd - phaseStart)) / 100),
-              ),
+              percent: Math.min(95, 40 + Math.round((p.percent * 55) / 100)),
               phase: "Applying background…",
             });
           }

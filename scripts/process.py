@@ -7,6 +7,8 @@ Reads a raw screen recording + events.json and produces a polished video with:
   - Buttery camera panning between click targets
   - Click highlight ripple animation
   - Scroll-based panning
+  - Optional background compositing BEFORE zoom so the background moves with
+    the recording instead of being glued on afterwards
 
 The camera uses spring-like exponential smoothing so all transitions look
 natural without any keyframe/segment complexity.
@@ -34,6 +36,101 @@ except ImportError:
     )
     import cv2
     import numpy as np
+
+
+# ─── Background / mask helpers ──────────────────────────────────────
+
+
+def _hex_to_bgr(hex_color):
+    """Convert '#RRGGBB' to (B, G, R) tuple."""
+    h = hex_color.lstrip("#")
+    r = int(h[0:2], 16)
+    g = int(h[2:4], 16)
+    b = int(h[4:6], 16)
+    return (b, g, r)
+
+
+def build_background_frame(canvas_w, canvas_h, bg_type="solid",
+                           bg_color="#6366f1",
+                           gradient_start="#667eea", gradient_end="#764ba2",
+                           wallpaper_path=None, image_blur="none"):
+    """
+    Build a single (canvas_h, canvas_w, 3) uint8 BGR frame that acts as the
+    persistent background.  Called once before the frame loop.
+
+    bg_type:
+        'solid'    – flat colour fill
+        'gradient' – vertical linear gradient between gradient_start / gradient_end
+        'image'    – wallpaper_path image, scaled to cover the canvas
+    image_blur: 'none' | 'moderate' | 'strong'
+    """
+    w, h = canvas_w, canvas_h
+
+    if bg_type == "image" and wallpaper_path and os.path.exists(wallpaper_path):
+        img = cv2.imread(wallpaper_path)
+        if img is not None:
+            # Scale to cover canvas while keeping aspect ratio
+            ih, iw = img.shape[:2]
+            scale = max(w / iw, h / ih)
+            nw, nh = int(iw * scale), int(ih * scale)
+            img = cv2.resize(img, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+            # Centre-crop to canvas
+            y0 = (nh - h) // 2
+            x0 = (nw - w) // 2
+            img = img[y0:y0 + h, x0:x0 + w]
+            if image_blur == "moderate":
+                img = cv2.GaussianBlur(img, (0, 0), sigmaX=10, sigmaY=10)
+            elif image_blur == "strong":
+                img = cv2.GaussianBlur(img, (0, 0), sigmaX=25, sigmaY=25)
+            return img
+        # Fall through to solid if image failed to load
+
+    if bg_type == "gradient":
+        top_bgr = np.array(_hex_to_bgr(gradient_start), dtype=np.float32)
+        bot_bgr = np.array(_hex_to_bgr(gradient_end),   dtype=np.float32)
+        # Build (h, 1, 3) column then broadcast
+        col = np.linspace(top_bgr, bot_bgr, h, dtype=np.float32).reshape(h, 1, 3)
+        frame = np.broadcast_to(col, (h, w, 3)).copy().astype(np.uint8)
+        return frame
+
+    # Solid (default)
+    bgr = _hex_to_bgr(bg_color)
+    return np.full((h, w, 3), bgr, dtype=np.uint8)
+
+
+def make_corner_mask(src_w, src_h, radius):
+    """
+    Return a (src_h, src_w, 1) float32 alpha mask in [0,1] that rounds the
+    four corners of the source frame by `radius` pixels.
+    1.0 = fully opaque, 0.0 = transparent.
+    """
+    mask = np.ones((src_h, src_w), dtype=np.uint8) * 255
+    if radius <= 0:
+        return (mask.astype(np.float32) / 255.0)[:, :, np.newaxis]
+
+    r = int(radius)
+    # Replace each corner's square region with a properly rounded shape:
+    # draw a filled white circle at the inner corner point, then flood
+    # the outer triangle to black.
+    corners = [
+        (0,       0,       r,     r),        # top-left
+        (src_w-r, 0,       src_w, r),        # top-right
+        (0,       src_h-r, r,     src_h),    # bottom-left
+        (src_w-r, src_h-r, src_w, src_h),   # bottom-right
+    ]
+    circle_centres = [
+        (r,       r),
+        (src_w-r, r),
+        (r,       src_h-r),
+        (src_w-r, src_h-r),
+    ]
+    for (x1, y1, x2, y2), (cx, cy) in zip(corners, circle_centres):
+        # Blank out the corner
+        mask[y1:y2, x1:x2] = 0
+        # Fill back the rounded part
+        cv2.circle(mask, (cx, cy), r, 255, -1, cv2.LINE_AA)
+
+    return (mask.astype(np.float32) / 255.0)[:, :, np.newaxis]
 
 
 # ─── Smooth Camera ──────────────────────────────────────────────────
@@ -272,6 +369,16 @@ def process_video(
     zoom_factor=2.0,
     hold_duration=1.5,
     ffmpeg_path="ffmpeg",
+    # Background compositing (composite-first zoom)
+    with_background=False,
+    padding=48,
+    corner_radius=12,
+    bg_type="solid",
+    bg_color="#6366f1",
+    gradient_start="#667eea",
+    gradient_end="#764ba2",
+    wallpaper_path=None,
+    image_blur="none",
 ):
     # ── Load events ──────────────────────────────────────────────
     events = []
@@ -309,18 +416,22 @@ def process_video(
     if total_frames <= 0:
         total_frames = 0  # unknown
 
+    # ── Canvas dimensions (source frame + padding on each side) ────
+    pad = int(padding) if with_background else 0
+    raw_canvas_w = frame_w + pad * 2
+    raw_canvas_h = frame_h + pad * 2
     # Ensure even output dimensions (H.264 requirement)
-    out_w = frame_w if frame_w % 2 == 0 else frame_w - 1
-    out_h = frame_h if frame_h % 2 == 0 else frame_h - 1
+    out_w = raw_canvas_w if raw_canvas_w % 2 == 0 else raw_canvas_w + 1
+    out_h = raw_canvas_h if raw_canvas_h % 2 == 0 else raw_canvas_h + 1
 
     print(
         f"[Processor] Video: {frame_w}x{frame_h} @ {fps:.1f}fps, "
-        f"~{total_frames} frames → {out_w}x{out_h}",
+        f"~{total_frames} frames → canvas {out_w}x{out_h} (pad={pad})",
         file=sys.stderr,
     )
 
-    if not clicks and not moves:
-        print("[Processor] No clicks or moves — simple re-encode", file=sys.stderr)
+    if not clicks and not moves and not with_background:
+        print("[Processor] No clicks, moves, or background — simple re-encode", file=sys.stderr)
         subprocess.run(
             [
                 ffmpeg_path, "-y", "-i", input_path,
@@ -334,16 +445,54 @@ def process_video(
         )
         return output_path
 
+    # ── Translate event coordinates to canvas space ────────────────
+    # All recorded events are in source-video coordinates (0…frame_w, 0…frame_h).
+    # The camera now operates on the full canvas, so we shift every coordinate
+    # by `pad` so that (0,0) in source maps to (pad, pad) in canvas.
+    def _to_canvas(events_list):
+        out = []
+        for e in events_list:
+            ne = dict(e)
+            if "x" in ne:
+                ne["x"] = ne["x"] + pad
+            if "y" in ne:
+                ne["y"] = ne["y"] + pad
+            out.append(ne)
+        return out
+
+    clicks_c  = _to_canvas(clicks)
+    scrolls_c = _to_canvas(scrolls)
+    moves_c   = _to_canvas(moves)
+
+    # ── Pre-build background + corner mask (once, before loop) ───────
+    bg_frame    = None
+    corner_mask = None
+    if with_background:
+        print(f"[Processor] Building background ({bg_type}, pad={pad}, radius={corner_radius})", file=sys.stderr)
+        bg_frame = build_background_frame(
+            out_w, out_h,
+            bg_type=bg_type,
+            bg_color=bg_color,
+            gradient_start=gradient_start,
+            gradient_end=gradient_end,
+            wallpaper_path=wallpaper_path,
+            image_blur=image_blur,
+        )
+        # Clamp radius to something sensible relative to source frame
+        r = max(0, min(int(corner_radius), min(frame_w, frame_h) // 4))
+        corner_mask = make_corner_mask(frame_w, frame_h, r)
+
     # ── Initialize camera + ripples ──────────────────────────────
-    camera = SmoothCamera(frame_w, frame_h, fps)
-    ripples = [ClickRipple(c["x"], c["y"], c["timestamp"]) for c in clicks]
+    # Camera operates in canvas space so zoom-crop naturally reveals background
+    camera = SmoothCamera(out_w, out_h, fps)
+    ripples = [ClickRipple(c["x"] + pad, c["y"] + pad, c["timestamp"]) for c in clicks]
 
     # ── Start ffmpeg writer pipe ─────────────────────────────────
     ffmpeg_cmd = [
         ffmpeg_path, "-y",
         "-f", "rawvideo",
         "-vcodec", "rawvideo",
-        "-s", f"{out_w}x{out_h}",
+        "-s", f"{out_w}x{out_h}",   # canvas size (includes padding when enabled)
         "-pix_fmt", "bgr24",
         "-r", str(fps),
         "-i", "-",
@@ -395,24 +544,45 @@ def process_video(
             t = last_t
         last_t = t
 
-        # Camera logic
-        update_camera_for_frame(camera, clicks, scrolls, moves, t, zoom_factor, hold_duration)
+        # Camera logic — uses canvas-space coordinates
+        update_camera_for_frame(camera, clicks_c, scrolls_c, moves_c, t, zoom_factor, hold_duration)
         camera.update()
 
-        # Crop + scale
+        # ── Composite source frame onto canvas (background + recording) ──
+        if with_background and bg_frame is not None:
+            canvas = bg_frame.copy()
+
+            # Apply corner mask to source frame (blend edges with background)
+            src = frame[:frame_h, :frame_w].copy()
+            if corner_mask is not None and corner_mask.shape[:2] == (frame_h, frame_w):
+                bg_slice = bg_frame[pad:pad + frame_h, pad:pad + frame_w]
+                # Blend: src * mask + bg_slice * (1 - mask)
+                alpha   = corner_mask                  # (H, W, 1) float32
+                src_f   = src.astype(np.float32)
+                bg_f    = bg_slice.astype(np.float32)
+                blended = (src_f * alpha + bg_f * (1.0 - alpha)).astype(np.uint8)
+                canvas[pad:pad + frame_h, pad:pad + frame_w] = blended
+            else:
+                canvas[pad:pad + frame_h, pad:pad + frame_w] = src
+        else:
+            # No background: canvas IS the source frame (zero-copy path)
+            canvas = frame
+
+        # Crop canvas with virtual camera (camera operates in canvas space)
         cx, cy, cw, ch = camera.get_crop()
 
-        # Safety clamp
-        cy2 = min(cy + ch, frame_h)
-        cx2 = min(cx + cw, frame_w)
-        cropped = frame[cy:cy2, cx:cx2]
+        # Safety clamp to actual canvas boundaries
+        canvas_h_real, canvas_w_real = canvas.shape[:2]
+        cy2 = min(cy + ch, canvas_h_real)
+        cx2 = min(cx + cw, canvas_w_real)
+        cropped = canvas[cy:cy2, cx:cx2]
 
         if cropped.size == 0:
-            cropped = frame
+            cropped = canvas
 
         scaled = cv2.resize(cropped, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
 
-        # Draw click ripples
+        # Draw click ripples (already in canvas space)
         for ripple in ripples:
             ripple.draw(scaled, t, (cx, cy, cw, ch), (out_w, out_h))
 
@@ -468,6 +638,43 @@ def main():
     parser.add_argument(
         "--ffmpeg", default="ffmpeg", help="Path to ffmpeg binary"
     )
+    # Background / composite-first flags
+    parser.add_argument(
+        "--background", action="store_true",
+        help="Composite recording onto a background before zoom"
+    )
+    parser.add_argument(
+        "--padding", type=int, default=48,
+        help="Padding in pixels around the recording (default: 48)"
+    )
+    parser.add_argument(
+        "--corner-radius", type=int, default=12,
+        help="Corner radius in pixels for the recording frame (default: 12)"
+    )
+    parser.add_argument(
+        "--bg-type", default="solid", choices=["solid", "gradient", "image"],
+        help="Background type (default: solid)"
+    )
+    parser.add_argument(
+        "--bg-color", default="#6366f1",
+        help="Solid background colour hex (default: #6366f1)"
+    )
+    parser.add_argument(
+        "--gradient-start", default="#667eea",
+        help="Gradient start colour hex (default: #667eea)"
+    )
+    parser.add_argument(
+        "--gradient-end", default="#764ba2",
+        help="Gradient end colour hex (default: #764ba2)"
+    )
+    parser.add_argument(
+        "--wallpaper", default=None,
+        help="Path to wallpaper image (used when --bg-type=image)"
+    )
+    parser.add_argument(
+        "--image-blur", default="none", choices=["none", "moderate", "strong"],
+        help="Blur strength for image background (default: none)"
+    )
 
     args = parser.parse_args()
 
@@ -482,6 +689,15 @@ def main():
         zoom_factor=args.zoom,
         hold_duration=args.hold,
         ffmpeg_path=args.ffmpeg,
+        with_background=args.background,
+        padding=args.padding,
+        corner_radius=args.corner_radius,
+        bg_type=args.bg_type,
+        bg_color=args.bg_color,
+        gradient_start=args.gradient_start,
+        gradient_end=args.gradient_end,
+        wallpaper_path=args.wallpaper,
+        image_blur=args.image_blur,
     )
 
 
