@@ -175,9 +175,9 @@ function resolveOverlayPosition(anchor, dBounds, W, H) {
 function showRecordingOverlay(_mainWindow) {
   closeRecordingOverlay();
 
-  // Window is sized to the expanded pill; collapsed / hover state is pure CSS.
-  const W = 240;
-  const H = 44;
+  // Window is sized to the compact card.
+  const W = 220;
+  const H = 110;
 
   recordingOverlay = new BrowserWindow({
     width: W,
@@ -226,7 +226,6 @@ function showRecordingOverlay(_mainWindow) {
  * @param {BrowserWindow} mainWindow  The main app window
  */
 function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
-
   ipcMain.handle(IPC.SET_CAPTURE_SOURCE, async (_event, sourceId) => {
     if (typeof setSelectedCaptureSource === "function") {
       setSelectedCaptureSource(sourceId);
@@ -304,6 +303,27 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     }
   });
 
+  ipcMain.removeAllListeners("recording:overlay-pause-clicked");
+  ipcMain.on("recording:overlay-pause-clicked", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.OVERLAY_PAUSE_REQUEST);
+    }
+  });
+
+  ipcMain.removeAllListeners("recording:overlay-resume-clicked");
+  ipcMain.on("recording:overlay-resume-clicked", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.OVERLAY_RESUME_REQUEST);
+    }
+  });
+
+  ipcMain.removeAllListeners("recording:overlay-discard-clicked");
+  ipcMain.on("recording:overlay-discard-clicked", () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send(IPC.OVERLAY_DISCARD_REQUEST);
+    }
+  });
+
   // ─── Save Recording Blob ──────────────────────────────────────────
 
   ipcMain.handle(IPC.SAVE_RECORDING, async (_event, buffer) => {
@@ -353,13 +373,46 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     if (opts.wallpaperFile) {
       const { app } = require("electron");
       const base = app.getAppPath();
+      // In packaged app base points inside app.asar — FFmpeg can't read asar paths.
+      // The forge config unpacks Wallpapers to app.asar.unpacked so try that first.
+      const baseUnpacked = base.replace(/app\.asar$/, "app.asar.unpacked");
       const candidates = [
-        path.join(base, "src", "renderer", "public", "Wallpapers", opts.wallpaperFile),
-        path.join(base, ".vite", "renderer", "main_window", "Wallpapers", opts.wallpaperFile),
+        path.join(
+          baseUnpacked,
+          "dist",
+          "renderer",
+          "Wallpapers",
+          opts.wallpaperFile,
+        ),
+        path.join(baseUnpacked, "renderer", "Wallpapers", opts.wallpaperFile),
+        path.join(
+          base,
+          "src",
+          "renderer",
+          "public",
+          "Wallpapers",
+          opts.wallpaperFile,
+        ),
+        path.join(
+          base,
+          ".vite",
+          "renderer",
+          "main_window",
+          "Wallpapers",
+          opts.wallpaperFile,
+        ),
         path.join(base, "dist", "renderer", "Wallpapers", opts.wallpaperFile),
         path.join(base, "renderer", "Wallpapers", opts.wallpaperFile),
       ];
-      wallpaperPath = candidates.find((p) => fs.existsSync(p)) || null;
+      wallpaperPath =
+        candidates.find(
+          (p) =>
+            fs.existsSync(p) &&
+            !p.includes("app.asar\\") &&
+            !p.includes("app.asar/"),
+        ) ||
+        candidates.find((p) => fs.existsSync(p)) ||
+        null;
       if (wallpaperPath) {
         console.log(`[IPC] Resolved wallpaper: ${wallpaperPath}`);
       } else {

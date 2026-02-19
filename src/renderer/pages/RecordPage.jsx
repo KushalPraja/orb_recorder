@@ -20,6 +20,7 @@ export function RecordPage({ onNavigate }) {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const sessionRef = useRef(null);
+  const discardingRef = useRef(false);
 
   // Load available screen sources
   useEffect(() => {
@@ -70,7 +71,7 @@ export function RecordPage({ onNavigate }) {
     if (!stream || stream.getTracks().every((t) => t.readyState !== "live")) {
       try {
         // fps comes from SettingsContext — no extra IPC round-trip needed
-        const fps = settings.fps
+        const fps = settings.fps;
         stream = await navigator.mediaDevices.getDisplayMedia({
           video: { frameRate: { ideal: fps } },
           audio: false,
@@ -101,7 +102,7 @@ export function RecordPage({ onNavigate }) {
       let mimeType = "video/webm; codecs=vp9";
       if (!MediaRecorder.isTypeSupported(mimeType))
         console.log("vp9 not supported, trying vp8");
-        mimeType = "video/webm;codecs=vp8";
+      mimeType = "video/webm;codecs=vp8";
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";
 
       const recorder = new MediaRecorder(stream, {
@@ -175,15 +176,67 @@ export function RecordPage({ onNavigate }) {
   }
 
   useEffect(() => {
-    const unsubOverlayStop = api.onOverlayStopRequest(() => {
+    const unsubStop = api.onOverlayStopRequest(() => {
       stopRecording();
     });
+    const unsubPause = api.onOverlayPauseRequest(() => {
+      if (mediaRecorderRef.current?.state === "recording") {
+        try {
+          mediaRecorderRef.current.pause();
+        } catch {}
+      }
+    });
+    const unsubResume = api.onOverlayResumeRequest(() => {
+      if (mediaRecorderRef.current?.state === "paused") {
+        try {
+          mediaRecorderRef.current.resume();
+        } catch {}
+      }
+    });
+    const unsubDiscard = api.onOverlayDiscardRequest(() => {
+      discardRecording();
+    });
     return () => {
-      unsubOverlayStop();
+      unsubStop();
+      unsubPause();
+      unsubResume();
+      unsubDiscard();
     };
   }, []);
 
+  async function discardRecording() {
+    if (!mediaRecorderRef.current) return;
+    discardingRef.current = true;
+    setRecording(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    const recorder = mediaRecorderRef.current;
+    if (recorder.state !== "inactive") {
+      try {
+        recorder.stop();
+      } catch {}
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
+    try {
+      await api.stopRecording();
+      await api.finishRecordingUi();
+    } catch {}
+    chunksRef.current = [];
+    setElapsed(0);
+    setStatus("Recording discarded — select a screen to record.");
+  }
+
   const handleRecordingStopped = useCallback(async () => {
+    // Discard path — don’t save or navigate
+    if (discardingRef.current) {
+      discardingRef.current = false;
+      return;
+    }
     try {
       const blob = new Blob(chunksRef.current, { type: "video/webm" });
       if (blob.size === 0) {

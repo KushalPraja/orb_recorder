@@ -21,6 +21,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on(IPC.OVERLAY_STOP_REQUEST, handler);
     return () => ipcRenderer.removeListener(IPC.OVERLAY_STOP_REQUEST, handler);
   },
+  onOverlayPauseRequest: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC.OVERLAY_PAUSE_REQUEST, handler);
+    return () => ipcRenderer.removeListener(IPC.OVERLAY_PAUSE_REQUEST, handler);
+  },
+  onOverlayResumeRequest: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC.OVERLAY_RESUME_REQUEST, handler);
+    return () =>
+      ipcRenderer.removeListener(IPC.OVERLAY_RESUME_REQUEST, handler);
+  },
+  onOverlayDiscardRequest: (callback) => {
+    const handler = () => callback();
+    ipcRenderer.on(IPC.OVERLAY_DISCARD_REQUEST, handler);
+    return () =>
+      ipcRenderer.removeListener(IPC.OVERLAY_DISCARD_REQUEST, handler);
+  },
 
   // ─── Library management ────────────────────────────────────────────
   getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),

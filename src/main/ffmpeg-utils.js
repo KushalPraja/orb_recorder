@@ -1,29 +1,32 @@
 // FFmpeg / ffprobe helpers — resolve binary paths, spawn processes, parse progress
 
 const { spawn } = require("child_process");
+const path = require("path");
 
 /**
- * Resolve the ffmpeg binary path from ffmpeg-static.
- * Handles both development (node_modules) and packaged (asar unpacked) scenarios.
+ * Resolve the ffmpeg binary path.
+ * In packaged app: <resourcesPath>/bin/ffmpeg.exe
+ * In dev:         <repo-root>/bin/ffmpeg.exe
  */
 function getFfmpegPath() {
-  let fp = require("ffmpeg-static");
-  // When packaged, ffmpeg-static may return a path inside app.asar — fix it
-  if (fp && fp.includes("app.asar")) {
-    fp = fp.replace("app.asar", "app.asar.unpacked");
+  const { app } = require("electron");
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "bin", "ffmpeg.exe");
   }
-  return fp;
+  return path.join(__dirname, "../../bin/ffmpeg.exe");
 }
 
 /**
- * Resolve the ffprobe binary path from ffprobe-static.
+ * Resolve the ffprobe binary path.
+ * In packaged app: <resourcesPath>/bin/ffprobe.exe
+ * In dev:         <repo-root>/bin/ffprobe.exe
  */
 function getFfprobePath() {
-  let fp = require("ffprobe-static").path;
-  if (fp && fp.includes("app.asar")) {
-    fp = fp.replace("app.asar", "app.asar.unpacked");
+  const { app } = require("electron");
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, "bin", "ffprobe.exe");
   }
-  return fp;
+  return path.join(__dirname, "../../bin/ffprobe.exe");
 }
 
 /**

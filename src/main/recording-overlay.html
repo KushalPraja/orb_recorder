@@ -20,25 +20,29 @@
       justify-content: center;
     }
 
-    /* ── Always-visible pill ────────────────────────────────────── */
-    .pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-      padding: 7px 11px 7px 12px;
-      border-radius: 12px;
-      background: rgba(9, 9, 11, 0.88);
-      border: 1px solid rgba(255, 255, 255, 0.07);
-      box-shadow: 0 4px 28px rgba(0, 0, 0, 0.55),
-                  inset 0 1px 0 rgba(255, 255, 255, 0.04);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+    /* ── Card ───────────────────────────────────────────────────── */
+    .card {
+      width: 210px;
+      background: rgba(9, 9, 11, 0.92);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
       -webkit-app-region: drag;
-      cursor: default;
       user-select: none;
+      padding: 10px 10px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
 
-    /* ── Red dot ──────────────────────────────────────────────── */
+    /* ── Top row: dot + timer + label ──────────────────────────── */
+    .top-row {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
     .dot {
       width: 7px; height: 7px;
       border-radius: 50%;
@@ -46,78 +50,176 @@
       flex-shrink: 0;
       animation: throb 1.8s ease-in-out infinite;
     }
+    .dot.paused {
+      background: #f59e0b;
+      animation: none;
+      opacity: 0.8;
+    }
     @keyframes throb {
       0%, 100% { opacity: 1;    transform: scale(1);    }
       50%       { opacity: 0.3; transform: scale(0.65); }
     }
 
-    /* ── Timer ────────────────────────────────────────────────── */
     .timer {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.06em;
       color: #fff;
-      min-width: 46px;
-      text-align: right;
+      min-width: 44px;
       flex-shrink: 0;
     }
 
-    /* ── Label ────────────────────────────────────────────────── */
     .lbl {
-      font-size: 10px;
-      font-weight: 400;
-      color: rgba(255, 255, 255, 0.30);
-      letter-spacing: .16em;
+      font-size: 9px;
+      font-weight: 500;
+      color: rgba(255, 255, 255, 0.28);
+      letter-spacing: .18em;
       text-transform: uppercase;
+      flex: 1;
+    }
+    .lbl.paused-lbl {
+      color: #f59e0b;
     }
 
-    /* ── Stop button ──────────────────────────────────────────── */
-    .stop {
+    /* ── Button row ─────────────────────────────────────────────── */
+    .btn-row {
+      display: flex;
+      gap: 5px;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn {
+      flex: 1;
       -webkit-app-region: no-drag;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 26px; height: 22px;
-      padding: 0;
-      border: 1px solid rgba(255, 77, 79, 0.22);
-      border-radius: 6px;
-      background: rgba(255, 77, 79, 0.10);
-      transition: background 0.12s ease;
+      gap: 4px;
+      padding: 5px 4px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 0;
+      background: rgba(255, 255, 255, 0.04);
+      color: rgba(255, 255, 255, 0.55);
+      font-family: inherit;
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      transition: background 0.1s, color 0.1s, border-color 0.1s;
     }
-    .stop:hover  { background: rgba(255, 77, 79, 0.30); }
-    .stop:active { transform: scale(0.88); }
-    .stop svg { width: 9px; height: 9px; }
+    .btn:active { transform: scale(0.94); }
+
+    .btn-pause:hover {
+      background: rgba(245, 158, 11, 0.14);
+      border-color: rgba(245, 158, 11, 0.3);
+      color: #f59e0b;
+    }
+
+    .btn-stop:hover {
+      background: rgba(255, 255, 255, 0.10);
+      border-color: rgba(255, 255, 255, 0.18);
+      color: #fff;
+    }
+
+    .btn-discard:hover {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.3);
+      color: #ef4444;
+    }
+
+    .btn svg { width: 8px; height: 8px; flex-shrink: 0; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="pill">
-      <div class="dot" aria-hidden="true"></div>
-      <span class="timer" id="t">00:00</span>
-      <span class="lbl" aria-hidden="true">rec</span>
-      <button class="stop" id="stop" aria-label="Stop recording">
-        <svg viewBox="0 0 24 24" fill="none">
-          <rect x="6" y="6" width="12" height="12" rx="2" fill="white"/>
-        </svg>
-      </button>
+    <div class="card">
+      <div class="top-row">
+        <div class="dot" id="dot" aria-hidden="true"></div>
+        <span class="timer" id="t">00:00</span>
+        <span class="lbl" id="lbl">rec</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-pause" id="pause" aria-label="Pause recording">
+          <svg viewBox="0 0 24 24" fill="currentColor" id="pause-icon">
+            <rect x="6" y="5" width="4" height="14" rx="1"/>
+            <rect x="14" y="5" width="4" height="14" rx="1"/>
+          </svg>
+          <span id="pause-label">Pause</span>
+        </button>
+        <button class="btn btn-stop" id="stop" aria-label="Stop recording">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <rect x="6" y="6" width="12" height="12" rx="1"/>
+          </svg>
+          <span>Stop</span>
+        </button>
+        <button class="btn btn-discard" id="discard" aria-label="Discard recording">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+          <span>Discard</span>
+        </button>
+      </div>
     </div>
   </div>
 
   <script>
     const { ipcRenderer } = require('electron');
 
-    const timerEl = document.getElementById('t');
-    const start   = Date.now();
+    const timerEl   = document.getElementById('t');
+    const dotEl     = document.getElementById('dot');
+    const lblEl     = document.getElementById('lbl');
+    const pauseBtn  = document.getElementById('pause');
+    const pauseIcon = document.getElementById('pause-icon');
+    const pauseLbl  = document.getElementById('pause-label');
+
+    let paused    = false;
+    let elapsed   = 0;       // seconds counted while not paused
+    let lastTick  = Date.now();
+
     const iv = setInterval(() => {
-      const s = Math.floor((Date.now() - start) / 1000);
-      timerEl.textContent =
-        String(Math.floor(s / 60)).padStart(2, '0') + ':' +
-        String(s % 60).padStart(2, '0');
-    }, 1000);
+      if (!paused) {
+        const now = Date.now();
+        elapsed += (now - lastTick) / 1000;
+        lastTick = now;
+        const s = Math.floor(elapsed);
+        timerEl.textContent =
+          String(Math.floor(s / 60)).padStart(2, '0') + ':' +
+          String(s % 60).padStart(2, '0');
+      }
+    }, 500);
+
+    pauseBtn.addEventListener('click', () => {
+      paused = !paused;
+      if (paused) {
+        dotEl.classList.add('paused');
+        lblEl.textContent = 'paused';
+        lblEl.classList.add('paused-lbl');
+        pauseIcon.innerHTML = '<polygon points="5,3 19,12 5,21" fill="currentColor"/>';
+        pauseLbl.textContent = 'Resume';
+        ipcRenderer.send('recording:overlay-pause-clicked');
+      } else {
+        lastTick = Date.now();
+        dotEl.classList.remove('paused');
+        lblEl.textContent = 'rec';
+        lblEl.classList.remove('paused-lbl');
+        pauseIcon.innerHTML =
+          '<rect x="6" y="5" width="4" height="14" rx="1"/>' +
+          '<rect x="14" y="5" width="4" height="14" rx="1"/>';
+        pauseLbl.textContent = 'Pause';
+        ipcRenderer.send('recording:overlay-resume-clicked');
+      }
+    });
 
     document.getElementById('stop').addEventListener('click', () => {
       ipcRenderer.send('recording:overlay-stop-clicked');
+    });
+
+    document.getElementById('discard').addEventListener('click', () => {
+      if (confirm('Discard this recording?')) {
+        ipcRenderer.send('recording:overlay-discard-clicked');
+      }
     });
 
     window.addEventListener('beforeunload', () => clearInterval(iv));

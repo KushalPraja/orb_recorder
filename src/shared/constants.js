@@ -61,6 +61,9 @@ const IPC = {
   PREPARE_RECORDING_UI: "recording:prepare-ui",
   FINISH_RECORDING_UI: "recording:finish-ui",
   OVERLAY_STOP_REQUEST: "recording:overlay-stop-request",
+  OVERLAY_PAUSE_REQUEST: "recording:overlay-pause-request",
+  OVERLAY_RESUME_REQUEST: "recording:overlay-resume-request",
+  OVERLAY_DISCARD_REQUEST: "recording:overlay-discard-request",
   SAVE_RECORDING: "recording:save",
 
   // Library management
