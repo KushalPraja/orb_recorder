@@ -39,39 +39,42 @@ function getPythonPath() {
 }
 
 function getProcessorBinaryPath() {
-  const localBin = path.join(
-    __dirname,
-    "..",
-    "..",
-    "bin",
-    process.platform === "win32" ? "screen_processor.exe" : "screen_processor",
-  );
-  if (fs.existsSync(localBin)) {
-    return localBin;
+  const exeName =
+    process.platform === "win32" ? "screen_processor.exe" : "screen_processor";
+
+  const isInsideAsar = __dirname.includes("app.asar");
+
+  if (!isInsideAsar) {
+    const localBin = path.join(__dirname, "..", "..", "bin", exeName);
+    if (fs.existsSync(localBin)) return localBin;
   }
 
-  const packagedBin = path.join(
-    process.resourcesPath || "",
-    "bin",
-    process.platform === "win32" ? "screen_processor.exe" : "screen_processor",
-  );
-  if (fs.existsSync(packagedBin)) {
-    return packagedBin;
+  if (process.resourcesPath) {
+    const packagedBin = path.join(process.resourcesPath, "bin", exeName);
+    if (fs.existsSync(packagedBin)) return packagedBin;
   }
 
   return null;
 }
 
 function getScriptPath() {
-  const devPath = path.join(__dirname, "..", "..", "scripts", "process.py");
-  if (fs.existsSync(devPath)) return devPath;
+  const isInsideAsar = __dirname.includes("app.asar");
 
-  const packagedPath = path.join(
-    process.resourcesPath || "",
-    "scripts",
-    "process.py",
-  );
-  return fs.existsSync(packagedPath) ? packagedPath : null;
+  if (!isInsideAsar) {
+    const devPath = path.join(__dirname, "..", "..", "scripts", "process.py");
+    if (fs.existsSync(devPath)) return devPath;
+  }
+
+  if (process.resourcesPath) {
+    const packagedPath = path.join(
+      process.resourcesPath,
+      "scripts",
+      "process.py",
+    );
+    if (fs.existsSync(packagedPath)) return packagedPath;
+  }
+
+  return null;
 }
 
 /* ─── Run the Python / binary auto-zoom processor ──────────────────── */
@@ -81,7 +84,6 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
     zoom = 2.0,
     hold = 1.5,
     onProgress,
-    // Background compositing (composite-first zoom)
     withBackground = false,
     padding = 48,
     cornerRadius = 12,
@@ -308,8 +310,6 @@ async function processVideo(opts) {
   }
 
   // ── Phase 2: Auto-zoom (optional, 40-95%) ────────────────────────
-  // When background is also requested, Python handles compositing inside
-  // the same frame loop (composite-first zoom) — Phase 3 is skipped.
   if (autoZoom) {
     const zoomOut = path.join(recordingDir, "__intermediate_zoom.mp4");
     intermediates.push(zoomOut);
@@ -356,6 +356,7 @@ async function processVideo(opts) {
   // ── Phase 3: Visual polish (optional, 40-95%) ─────────────────────
   // Only runs when background is requested WITHOUT auto-zoom.
   // When autoZoom is also true, Python already composited in Phase 2.
+
   if (background && !autoZoom) {
     const visualOut = outPath; // write directly to final (no zoom step)
 
