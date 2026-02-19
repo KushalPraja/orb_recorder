@@ -578,7 +578,7 @@ export function ReviewPage({ data, onNavigate }) {
           <div className="review-loading-spinner">
             <Loader2 size={28} className="spinner" />
           </div>
-          <p>Preparing preview…</p>
+          <p>Preparing editor preview…</p>
           <span>Converting to seekable format</span>
         </div>
       </div>

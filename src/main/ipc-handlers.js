@@ -176,8 +176,8 @@ function showRecordingOverlay(_mainWindow) {
   closeRecordingOverlay();
 
   // Window is sized to the compact card.
-  const W = 220;
-  const H = 110;
+  const W = 260;
+  const H = 64;
 
   recordingOverlay = new BrowserWindow({
     width: W,
