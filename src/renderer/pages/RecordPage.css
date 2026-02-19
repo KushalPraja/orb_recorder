@@ -53,7 +53,6 @@
 .source-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
   padding: 8px;
   cursor: pointer;
   display: flex;
@@ -75,7 +74,6 @@
 .source-preview {
   width: 100%;
   aspect-ratio: 16 / 10;
-  border-radius: var(--radius-sm);
   background: var(--bg-primary);
   display: flex;
   align-items: center;
@@ -128,7 +126,6 @@
   background: var(--text-primary);
   color: var(--bg-primary);
   border: none;
-  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   font-family: var(--font-sans);

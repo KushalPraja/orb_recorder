@@ -184,6 +184,8 @@ async function processVideo(opts) {
     backgroundColor = "#6366f1",
     gradientStart = "#667eea",
     gradientEnd = "#764ba2",
+    wallpaperPath = null,
+    imageBlur = "none",
 
     // Trim
     trimStart,
@@ -319,6 +321,8 @@ async function processVideo(opts) {
           backgroundColor,
           gradientStart,
           gradientEnd,
+          wallpaperPath,
+          imageBlur,
         },
         (p) => {
           if (onProgress && Number.isFinite(p.percent)) {

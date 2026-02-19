@@ -31,7 +31,6 @@
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   padding: 1px 6px;
-  border-radius: 10px;
 }
 
 .btn-new-recording {
@@ -42,7 +41,6 @@
   background: var(--text-primary);
   color: var(--bg-primary);
   border: none;
-  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 600;
   font-family: var(--font-sans);
@@ -72,7 +70,6 @@
   align-items: center;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: var(--radius-md);
   cursor: pointer;
   transition: background var(--transition-fast);
 }

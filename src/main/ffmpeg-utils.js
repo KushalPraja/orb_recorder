@@ -315,6 +315,8 @@ async function applyVisualExport(
     backgroundColor = "#6366f1",
     gradientStart = "#667eea",
     gradientEnd = "#764ba2",
+    wallpaperPath = null,
+    imageBlur = "none",   // 'none' | 'moderate' | 'strong'
   } = opts;
 
   const info = await probeVideo(inputPath);
@@ -332,36 +334,82 @@ async function applyVisualExport(
     Math.min(cornerRadius, Math.floor(Math.min(srcW, srcH) / 4)),
   );
 
-  // ── Background source (lavfi color) ──────────────────────────────
-  // For compatibility with older FFmpeg builds, gradient presets are mapped
-  // to a single representative solid color (midpoint of start/end).
-  let bgHex = backgroundColor;
-  if (backgroundType === "gradient") {
-    const [r1, g1, b1] = hexToRgb(gradientStart);
-    const [r2, g2, b2] = hexToRgb(gradientEnd);
-    const rm = Math.round((r1 + r2) / 2)
-      .toString(16)
-      .padStart(2, "0");
-    const gm = Math.round((g1 + g2) / 2)
-      .toString(16)
-      .padStart(2, "0");
-    const bm = Math.round((b1 + b2) / 2)
-      .toString(16)
-      .padStart(2, "0");
-    bgHex = `#${rm}${gm}${bm}`;
-  }
-
-  const bgColor = bgHex.replace("#", "0x");
   const outFps =
     Number.isFinite(Number(fps)) && Number(fps) > 0
       ? Math.round(Number(fps))
       : 30;
 
+  const frameCount =
+    Number.isFinite(nbFrames) && nbFrames > 0 ? Math.round(nbFrames) : 0;
+
+  const alphaExpr = `if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),255)`;
+
+  // ── Image background path ──────────────────────────────────────────
+  if (backgroundType === "image" && wallpaperPath) {
+    const blurSigma =
+      imageBlur === "moderate" ? 10 :
+      imageBlur === "strong"   ? 25 : 0;
+
+    const blurFilter = blurSigma > 0
+      ? `,gblur=sigma=${blurSigma}`
+      : "";
+
+    let filterComplex;
+    if (R > 0) {
+      filterComplex = [
+        `[1:v]scale=${finalW}:${finalH},setsar=1${blurFilter}[bg]`,
+        `[0:v]format=yuva420p,geq=lum='p(X,Y)':a='${alphaExpr}'[rounded]`,
+        `[bg][rounded]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
+      ].join(";");
+    } else {
+      filterComplex = [
+        `[1:v]scale=${finalW}:${finalH},setsar=1${blurFilter}[bg]`,
+        `[bg][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
+      ].join(";");
+    }
+
+    console.log(`[FFmpeg] Image background: ${wallpaperPath}  blur=${imageBlur}`);
+    console.log(`[FFmpeg] Filter graph:\n${filterComplex}`);
+
+    const args = [
+      "-i", inputPath,
+      "-i", wallpaperPath,
+      "-filter_complex", filterComplex,
+      "-map", "[vout]",
+      "-c:v", "libx264",
+      "-preset", "medium",
+      "-crf", "18",
+      "-pix_fmt", "yuv420p",
+      "-r", String(outFps),
+      ...(frameCount > 0 ? ["-frames:v", String(frameCount)] : []),
+      "-shortest",
+      "-an",
+      "-movflags", "+faststart",
+      "-y", outputPath,
+    ];
+
+    const { promise } = spawnFfmpeg(args, onProgress, duration);
+    await promise;
+    console.log(`[FFmpeg] Image background export done → ${outputPath}`);
+    return outputPath;
+  }
+
+  // ── Solid / gradient color background (lavfi) ──────────────────────
+  let bgHex = backgroundColor;
+  if (backgroundType === "gradient") {
+    const [r1, g1, b1] = hexToRgb(gradientStart);
+    const [r2, g2, b2] = hexToRgb(gradientEnd);
+    const rm = Math.round((r1 + r2) / 2).toString(16).padStart(2, "0");
+    const gm = Math.round((g1 + g2) / 2).toString(16).padStart(2, "0");
+    const bm = Math.round((b1 + b2) / 2).toString(16).padStart(2, "0");
+    bgHex = `#${rm}${gm}${bm}`;
+  }
+
+  const bgColor = bgHex.replace("#", "0x");
+
   // ── Build filter_complex (video input[0] + color input[1]) ───────
   let filterComplex;
   if (R > 0) {
-    // This alpha expression matches the pattern already validated manually.
-    const alphaExpr = `if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),255)`;
     filterComplex = [
       `[0:v]format=yuva420p,geq=lum='p(X,Y)':a='${alphaExpr}'[rounded]`,
       `[1:v][rounded]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
@@ -369,10 +417,6 @@ async function applyVisualExport(
   } else {
     filterComplex = `[1:v][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`;
   }
-
-  const frameCount =
-    Number.isFinite(nbFrames) && nbFrames > 0 ? Math.round(nbFrames) : 0;
-
   const args = [
     "-i",
     inputPath,
@@ -402,14 +446,6 @@ async function applyVisualExport(
     "-y",
     outputPath,
   ];
-
-  console.log(
-    `[FFmpeg] Visual export: ${srcW}x${srcH} → ${finalW}x${finalH}  R=${R}  pad=${padding}`,
-  );
-  console.log(
-    `[FFmpeg] Background: ${bgColor} @ ${finalW}x${finalH} ${outFps}fps`,
-  );
-  console.log(`[FFmpeg] Filter graph:\n${filterComplex}`);
 
   const { promise } = spawnFfmpeg(args, onProgress, duration);
   try {

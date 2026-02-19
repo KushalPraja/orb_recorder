@@ -27,7 +27,7 @@
 }
 
 .rv-header h2 {
-  font-size: 13px;
+  font-size: 11px; /* unified with sidebar */
   font-weight: 600;
   color: var(--text-primary);
   letter-spacing: 0.04em;
@@ -89,6 +89,16 @@
   justify-content: center;
   background: var(--bg-primary);
   overflow: hidden;
+  position: relative;
+}
+
+/* Absolute image layer for image-type backgrounds */
+.rv-preview-bg-image {
+  position: absolute;
+  inset: -30px; /* overscan so blur doesn't show edges */
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
 }
 
 .rv-preview-canvas {
@@ -99,6 +109,8 @@
   /* Fill the wrap so background color shows around the video */
   width: 100%;
   height: 100%;
+  position: relative;
+  z-index: 1;
 }
 
 .rv-video {
@@ -739,6 +751,67 @@
   border-top: 1px solid var(--border);
 }
 
+/* ── Panel footer (actions moved into the right sidebar) ────────── */
+.rv-panel-footer {
+  margin-top: auto; /* push to bottom of the .rv-panel */
+  padding: 12px;
+  border-top: none; /* removed separator line per request */
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: transparent;
+}
+
+.rv-panel-footer .rv-btn {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 11px; /* unified with sidebar */
+  font-weight: 600;
+  border-radius: 0; /* flat — match sidebar aesthetic */
+  justify-content: center;
+  text-transform: none;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary); /* neutral gray */
+  color: var(--text-primary); /* white/neutral */
+}
+
+/* primary / secondary / danger variants inside the sidebar footer (monochrome) */
+.rv-panel-footer .rv-btn--primary {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+.rv-panel-footer .rv-btn--secondary {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+.rv-panel-footer .rv-btn--danger {
+  background: transparent;
+  color: var(--text-tertiary);
+  border-color: var(--border);
+}
+
+/* subtle hover states that stay monochrome (no red) */
+.rv-panel-footer .rv-btn--primary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--border-hover);
+}
+
+.rv-panel-footer .rv-btn--secondary:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  border-color: var(--border-hover);
+}
+
+.rv-panel-footer .rv-btn--danger:hover:not(:disabled) {
+  background: var(--bg-secondary);
+  color: var(--text-tertiary); /* keep monochrome on hover */
+  border-color: var(--border-hover);
+}
+
+
 /* ─── Buttons ────────────────────────────────────────────────────── */
 
 .rv-btn {
@@ -803,7 +876,7 @@
   gap: 12px;
   flex: 1;
   color: var(--text-tertiary);
-  font-size: 13px;
+  font-size: 11px; /* unified with sidebar */
 }
 
 .review-loading {
@@ -820,7 +893,7 @@
 }
 
 .review-loading p {
-  font-size: 13px;
+  font-size: 11px; /* unified with sidebar */
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -828,6 +901,132 @@
 .review-loading span {
   font-size: 11px;
   color: var(--text-tertiary);
+}
+
+/* ─── Background type selector ──────────────────────────────────── */
+
+.rv-bg-type-selector {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.rv-bg-type-btn {
+  padding: 5px 0;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  white-space: nowrap;
+}
+
+.rv-bg-type-btn:last-child {
+  border-right: none;
+}
+
+.rv-bg-type-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.rv-bg-type-btn.active {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+
+/* ─── Color input ────────────────────────────────────────────────── */
+
+.rv-color-input {
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border);
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.rv-color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.rv-color-input::-webkit-color-swatch {
+  border: none;
+}
+
+/* ─── Wallpaper grid ─────────────────────────────────────────────── */
+
+.rv-wallpaper-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+
+.rv-wallpaper-thumb {
+  aspect-ratio: 16 / 10;
+  background-size: cover;
+  background-position: center;
+  border: 1px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  outline: none;
+  transition: all 0.1s ease;
+}
+
+.rv-wallpaper-thumb:hover {
+  border-color: var(--text-muted);
+}
+
+.rv-wallpaper-thumb.active {
+  border-color: var(--text-primary);
+  outline: 1px solid var(--text-primary);
+  outline-offset: 1px;
+}
+
+/* ─── Blur options ───────────────────────────────────────────────── */
+
+.rv-blur-options {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.rv-blur-btn {
+  flex: 1;
+  padding: 5px 0;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.rv-blur-btn:last-child {
+  border-right: none;
+}
+
+.rv-blur-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.rv-blur-btn.active {
+  background: var(--text-primary);
+  color: var(--bg-primary);
 }
 
 /* ─── Spinner ────────────────────────────────────────────────────── */

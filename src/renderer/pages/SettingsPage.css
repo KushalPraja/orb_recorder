@@ -101,7 +101,6 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
   padding: 5px 28px 5px 10px;
   font-size: 12px;
   font-family: var(--font-sans);
@@ -128,7 +127,6 @@
   padding: 5px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 500;
@@ -150,7 +148,6 @@
   width: 120px;
   height: 3px;
   background: var(--bg-tertiary);
-  border-radius: 2px;
   outline: none;
   cursor: pointer;
 }
@@ -160,7 +157,6 @@
   appearance: none;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
   background: var(--text-primary);
   border: 2px solid var(--bg-primary);
   cursor: pointer;

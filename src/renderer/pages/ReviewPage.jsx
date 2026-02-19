@@ -20,16 +20,38 @@ const api = window.electronAPI;
 
 /* ─── Background presets ──────────────────────────────────────────── */
 
-const BG_PRESETS = [
-  { name: "Graphite", type: "gradient", start: "#1a1a1a", end: "#0f0f0f" },
-  { name: "Steel", type: "gradient", start: "#2a2a2a", end: "#111111" },
-  { name: "Charcoal", type: "gradient", start: "#232323", end: "#161616" },
-  { name: "Slate", type: "solid", color: "#1e293b" },
-  { name: "Zinc", type: "solid", color: "#18181b" },
-  { name: "Ash", type: "solid", color: "#2a2a2a" },
-  { name: "Stone", type: "solid", color: "#3a3a3a" },
-  { name: "Cloud", type: "solid", color: "#d4d4d4" },
-  { name: "White", type: "solid", color: "#f8fafc" },
+const GRADIENT_PRESETS = [
+  { name: "Graphite", start: "#1a1a1a", end: "#0f0f0f" },
+  { name: "Steel",    start: "#2a2a2a", end: "#111111" },
+  { name: "Charcoal", start: "#232323", end: "#161616" },
+  { name: "Ocean",    start: "#0f2027", end: "#203a43" },
+  { name: "Violet",   start: "#16001e", end: "#30115e" },
+  { name: "Forest",   start: "#0a1a0f", end: "#1a3a1f" },
+  { name: "Dusk",     start: "#1a0a1a", end: "#3a102a" },
+  { name: "Ember",    start: "#1a0a00", end: "#2d1200" },
+];
+
+const COLOR_PRESETS = [
+  "#1e293b", "#18181b", "#2a2a2a", "#3a3a3a",
+  "#d4d4d4", "#f8fafc", "#0f172a", "#450a0a",
+];
+
+const WALLPAPERS = [
+  "10-14-Day-Thumb.jpg",
+  "10-15-Day-thumb.jpg",
+  "10-15-Night-thumb.jpg",
+  "11-0-Color-Day-thumbnails.jpg",
+  "11-0-Day-thumbnail.jpg",
+  "12-Light-thumbnail.jpg",
+  "13-Ventura-Light-thumb.jpg",
+  "14-Sonoma-Horizon-thumb.jpeg",
+  "14-Sonoma-Light-thumb.jpg",
+  "15-Sequoia-Dark-thumbnail.jpg",
+  "15-Sequoia-Light-thumbnail.jpg",
+  "26-Tahoe-Beach-Day-thumb.jpeg",
+  "26-Tahoe-Beach-Dusk-thumb.jpeg",
+  "26-Tahoe-Dark-6K-thumb.jpeg",
+  "26-Tahoe-Light-6K-thumb.jpeg",
 ];
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
@@ -358,8 +380,12 @@ export function ReviewPage({ data, onNavigate }) {
 
   /* state — export options */
   const [autoZoom, setAutoZoom] = useState(false);
-  const [bgEnabled, setBgEnabled] = useState(true);
-  const [presetIdx, setPresetIdx] = useState(0);
+  // bgType: 'none' | 'color' | 'gradient' | 'image'
+  const [bgType, setBgType] = useState("gradient");
+  const [bgColor, setBgColor] = useState("#1e293b");
+  const [gradientIdx, setGradientIdx] = useState(0);
+  const [wallpaperIdx, setWallpaperIdx] = useState(0);
+  const [imageBlur, setImageBlur] = useState("none"); // 'none' | 'moderate' | 'strong'
   const [cornerRadius, setCornerRadius] = useState(12);
   const [padding, setPadding] = useState(48);
 
@@ -464,7 +490,7 @@ export function ReviewPage({ data, onNavigate }) {
   }, []);
 
   /* ─── Export handler ─────────────────────────────────────────────── */
-  const preset = BG_PRESETS[presetIdx];
+  const gradient = GRADIENT_PRESETS[gradientIdx];
 
   const handleExport = async () => {
     if (!data?.sessionDir) return;
@@ -478,13 +504,18 @@ export function ReviewPage({ data, onNavigate }) {
     const exportOpts = {
       sessionDir: data.sessionDir,
       autoZoom,
-      background: bgEnabled,
-      cornerRadius,
-      padding,
-      backgroundType: preset.type,
-      backgroundColor: preset.color || preset.start,
-      gradientStart: preset.start,
-      gradientEnd: preset.end,
+      background: bgType !== "none",
+      cornerRadius: bgType !== "none" ? cornerRadius : 0,
+      padding: bgType !== "none" ? padding : 0,
+      backgroundType:
+        bgType === "color"     ? "solid"    :
+        bgType === "gradient"  ? "gradient" :
+        bgType === "image"     ? "image"    : "none",
+      backgroundColor: bgType === "color" ? bgColor : undefined,
+      gradientStart: bgType === "gradient" ? gradient.start : undefined,
+      gradientEnd:   bgType === "gradient" ? gradient.end   : undefined,
+      wallpaperFile: bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
+      imageBlur:     bgType === "image" ? imageBlur : "none",
       ...(isTrimmed && { trimStart, trimEnd }),
     };
 
@@ -510,11 +541,13 @@ export function ReviewPage({ data, onNavigate }) {
   };
 
   /* ─── Preview background CSS ─────────────────────────────────────── */
-  const previewBg = bgEnabled
-    ? preset.type === "gradient"
-      ? `linear-gradient(135deg, ${preset.start}, ${preset.end})`
-      : preset.color
-    : "var(--bg-secondary)";
+  const previewCanvasBg =
+    bgType === "color"    ? bgColor :
+    bgType === "gradient" ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` :
+    bgType === "image"    ? "transparent" :
+    "var(--bg-secondary)";
+
+  const blurPx = imageBlur === "moderate" ? 10 : imageBlur === "strong" ? 24 : 0;
 
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
 
@@ -578,11 +611,21 @@ export function ReviewPage({ data, onNavigate }) {
         <div className="rv-left">
           {/* Video preview */}
           <div className="rv-preview-wrap">
+            {/* Blurred image background layer */}
+            {bgType === "image" && (
+              <div
+                className="rv-preview-bg-image"
+                style={{
+                  backgroundImage: `url(./Wallpapers/${WALLPAPERS[wallpaperIdx]})`,
+                  filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
+                }}
+              />
+            )}
             <div
               className="rv-preview-canvas"
               style={{
-                background: bgEnabled ? previewBg : "transparent",
-                padding: bgEnabled
+                background: previewCanvasBg,
+                padding: bgType !== "none"
                   ? `${Math.round(padding / 4)}px`
                   : 0,
               }}
@@ -591,7 +634,7 @@ export function ReviewPage({ data, onNavigate }) {
                 ref={videoRef}
                 className="rv-video"
                 style={{
-                  borderRadius: bgEnabled ? `${cornerRadius}px` : 0,
+                  borderRadius: bgType !== "none" ? `${cornerRadius}px` : 0,
                 }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
@@ -666,53 +709,111 @@ export function ReviewPage({ data, onNavigate }) {
                   <span className="rv-toggle-track" />
                 </label>
               </div>
-              <div className="rv-option-row">
-                <div className="rv-option-info">
-                  <Layers size={12} className="rv-option-icon" />
-                  <div className="rv-option-text">
-                    <span className="rv-option-name">Background</span>
-                    <span className="rv-option-desc">Padded + styled</span>
-                  </div>
-                </div>
-                <label className="rv-toggle">
-                  <input
-                    type="checkbox"
-                    checked={bgEnabled}
-                    onChange={(e) => setBgEnabled(e.target.checked)}
-                  />
-                  <span className="rv-toggle-track" />
-                </label>
-              </div>
             </div>
 
-            {/* ── Background section (conditional) ──────────────── */}
-            {bgEnabled && (
-              <>
-                <div className="rv-section-header">
-                  <Layers size={9} />
-                  <span>Background</span>
+            {/* ── Background section ────────────────────────────── */}
+            <div className="rv-section-header">
+              <Layers size={9} />
+              <span>Background</span>
+            </div>
+            <div className="rv-section-body">
+              {/* Type selector */}
+              <div className="rv-field">
+                <span className="rv-field-label">Type</span>
+                <div className="rv-bg-type-selector">
+                  {["none", "color", "gradient", "image"].map((t) => (
+                    <button
+                      key={t}
+                      className={`rv-bg-type-btn ${bgType === t ? "active" : ""}`}
+                      onClick={() => setBgType(t)}
+                    >
+                      {t === "none" ? "None" : t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
+                    </button>
+                  ))}
                 </div>
-                <div className="rv-section-body">
-                  <div className="rv-field">
+              </div>
+
+              {/* Color picker */}
+              {bgType === "color" && (
+                <div className="rv-field">
+                  <div className="rv-field-header">
                     <span className="rv-field-label">Color</span>
-                    <div className="rv-swatches">
-                      {BG_PRESETS.map((p, i) => {
-                        const bg =
-                          p.type === "gradient"
-                            ? `linear-gradient(135deg, ${p.start}, ${p.end})`
-                            : p.color;
-                        return (
-                          <button
-                            key={i}
-                            className={`rv-swatch ${i === presetIdx ? "active" : ""}`}
-                            style={{ background: bg }}
-                            title={p.name}
-                            onClick={() => setPresetIdx(i)}
-                          />
-                        );
-                      })}
+                    <input
+                      type="color"
+                      value={bgColor}
+                      onChange={(e) => setBgColor(e.target.value)}
+                      className="rv-color-input"
+                    />
+                  </div>
+                  <div className="rv-swatches">
+                    {COLOR_PRESETS.map((c, i) => (
+                      <button
+                        key={i}
+                        className={`rv-swatch ${bgColor === c ? "active" : ""}`}
+                        style={{ background: c }}
+                        title={c}
+                        onClick={() => setBgColor(c)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Gradient presets */}
+              {bgType === "gradient" && (
+                <div className="rv-field">
+                  <span className="rv-field-label">Preset</span>
+                  <div className="rv-swatches">
+                    {GRADIENT_PRESETS.map((g, i) => (
+                      <button
+                        key={i}
+                        className={`rv-swatch ${gradientIdx === i ? "active" : ""}`}
+                        style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
+                        title={g.name}
+                        onClick={() => setGradientIdx(i)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Image wallpaper picker */}
+              {bgType === "image" && (
+                <>
+                  <div className="rv-field">
+                    <span className="rv-field-label">Wallpaper</span>
+                    <div className="rv-wallpaper-grid">
+                      {WALLPAPERS.map((w, i) => (
+                        <button
+                          key={i}
+                          className={`rv-wallpaper-thumb ${wallpaperIdx === i ? "active" : ""}`}
+                          style={{ backgroundImage: `url(./Wallpapers/${w})` }}
+                          title={w.replace(/-thumb\.(jpg|jpeg)$/i, "").replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
+                          onClick={() => setWallpaperIdx(i)}
+                        />
+                      ))}
                     </div>
                   </div>
+                  <div className="rv-field">
+                    <span className="rv-field-label">Blur</span>
+                    <div className="rv-blur-options">
+                      {["none", "moderate", "strong"].map((b) => (
+                        <button
+                          key={b}
+                          className={`rv-blur-btn ${imageBlur === b ? "active" : ""}`}
+                          onClick={() => setImageBlur(b)}
+                        >
+                          {b.charAt(0).toUpperCase() + b.slice(1)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Radius + Padding — shown whenever bg is enabled */}
+              {bgType !== "none" && (
+                <>
                   <div className="rv-field">
                     <div className="rv-field-header">
                       <span className="rv-field-label">Radius</span>
@@ -741,9 +842,53 @@ export function ReviewPage({ data, onNavigate }) {
                       className="rv-slider"
                     />
                   </div>
-                </div>
-              </>
-            )}
+                </>
+              )}
+            </div>
+
+            {/* Panel footer — actions moved into sidebar */}
+            <div className="rv-panel-footer">
+              {done ? (
+                <>
+                  <button className="rv-btn rv-btn--primary" onClick={handleOpen}>
+                    <Check size={14} />
+                    <span>Open Output</span>
+                  </button>
+                  <button
+                    className="rv-btn rv-btn--secondary"
+                    onClick={() => onNavigate("home")}
+                  >
+                    Done
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className="rv-btn rv-btn--primary"
+                    onClick={handleExport}
+                    disabled={processing}
+                  >
+                    {processing ? (
+                      <>
+                        <Loader2 size={14} className="spinner" />
+                        <span>Exporting…</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Export</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    className="rv-btn rv-btn--danger"
+                    onClick={handleDiscard}
+                    disabled={processing}
+                  >
+                    <span>Discard</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -771,51 +916,7 @@ export function ReviewPage({ data, onNavigate }) {
         </div>
       )}
 
-      {/* ── Actions ─────────────────────────────────────────────── */}
-      <div className="rv-actions">
-        {done ? (
-          <>
-            <button className="rv-btn rv-btn--primary" onClick={handleOpen}>
-              <Check size={14} />
-              <span>Open Output</span>
-            </button>
-            <button
-              className="rv-btn rv-btn--secondary"
-              onClick={() => onNavigate("home")}
-            >
-              Done
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              className="rv-btn rv-btn--primary"
-              onClick={handleExport}
-              disabled={processing}
-            >
-              {processing ? (
-                <>
-                  <Loader2 size={14} className="spinner" />
-                  <span>Exporting…</span>
-                </>
-              ) : (
-                <>
-                  <Download size={14} />
-                  <span>Export</span>
-                </>
-              )}
-            </button>
-            <button
-              className="rv-btn rv-btn--danger"
-              onClick={handleDiscard}
-              disabled={processing}
-            >
-              <Trash2 size={14} />
-              <span>Discard</span>
-            </button>
-          </>
-        )}
-      </div>
+      {/* actions moved into sidebar footer */}
     </div>
   );
 }

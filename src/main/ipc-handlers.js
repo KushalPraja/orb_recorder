@@ -349,6 +349,25 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
       throw new Error("No recording session to process");
     }
 
+    // Resolve wallpaper filesystem path (checked in multiple locations for dev + packaged)
+    let wallpaperPath = null;
+    if (opts.wallpaperFile) {
+      const { app } = require("electron");
+      const base = app.getAppPath();
+      const candidates = [
+        path.join(base, "src", "renderer", "public", "Wallpapers", opts.wallpaperFile),
+        path.join(base, ".vite", "renderer", "main_window", "Wallpapers", opts.wallpaperFile),
+        path.join(base, "dist", "renderer", "Wallpapers", opts.wallpaperFile),
+        path.join(base, "renderer", "Wallpapers", opts.wallpaperFile),
+      ];
+      wallpaperPath = candidates.find((p) => fs.existsSync(p)) || null;
+      if (wallpaperPath) {
+        console.log(`[IPC] Resolved wallpaper: ${wallpaperPath}`);
+      } else {
+        console.warn(`[IPC] Wallpaper not found: ${opts.wallpaperFile}`);
+      }
+    }
+
     try {
       const outputPath = await processVideo({
         recordingDir: sessionDir,
@@ -367,6 +386,8 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
         backgroundColor: opts.backgroundColor ?? "#6366f1",
         gradientStart: opts.gradientStart ?? "#667eea",
         gradientEnd: opts.gradientEnd ?? "#764ba2",
+        wallpaperPath,
+        imageBlur: opts.imageBlur ?? "none",
 
         // Trim — optional time range
         trimStart: opts.trimStart,
