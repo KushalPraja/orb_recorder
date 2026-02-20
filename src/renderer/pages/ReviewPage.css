@@ -26,6 +26,25 @@
   gap: 10px;
 }
 
+.rv-back-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.rv-back-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border-hover);
+}
+
 .rv-header h2 {
   font-size: 11px;
   /* unified with sidebar */
@@ -104,7 +123,9 @@
 }
 
 .rv-preview-canvas {
-  transition: background 0.2s ease, padding 0.2s ease;
+  transition:
+    background 0.2s ease,
+    padding 0.2s ease;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -169,11 +190,9 @@
   letter-spacing: 0.02em;
 }
 
-
 .trimmer-badge--clip {
   color: var(--text-secondary);
 }
-
 
 /* ── Timeline track ──────────────────────────────────────────────── */
 
@@ -222,10 +241,12 @@
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg,
-      transparent,
-      rgba(255, 255, 255, 0.04),
-      transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.04),
+    transparent
+  );
   animation: trimmer-shimmer 1.8s ease infinite;
 }
 
@@ -599,12 +620,12 @@
   transition: all 0.2s ease;
 }
 
-.rv-toggle input:checked+.rv-toggle-track {
+.rv-toggle input:checked + .rv-toggle-track {
   background: var(--text-secondary);
   border-color: var(--text-secondary);
 }
 
-.rv-toggle input:checked+.rv-toggle-track::after {
+.rv-toggle input:checked + .rv-toggle-track::after {
   transform: translateX(14px);
   background: var(--bg-primary);
 }
@@ -819,7 +840,6 @@
   /* keep monochrome on hover */
   border-color: var(--border-hover);
 }
-
 
 /* ─── Buttons ────────────────────────────────────────────────────── */
 

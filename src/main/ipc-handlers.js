@@ -22,6 +22,7 @@ const {
   OUTPUT_FILE,
   CLEAN_MP4_FILE,
   SETTINGS_FILE,
+  META_FILE,
 } = require("../shared/constants");
 
 // ─── Helper Functions ────────────────────────────────────────────
@@ -423,6 +424,7 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
     try {
       const outputPath = await processVideo({
         recordingDir: sessionDir,
+        outputPath: opts.exportPath || undefined,
         fps: settings.fps,
 
         // Auto-zoom — only when the caller explicitly enables it
@@ -558,9 +560,21 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
         const stat = fs.statSync(rawFile);
         const hasOutput = fs.existsSync(outputFile);
 
+        // Read project name from meta.json if available
+        let projectName = entry.name;
+        const metaPath = path.join(sessionDir, META_FILE);
+        try {
+          if (fs.existsSync(metaPath)) {
+            const meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+            if (meta.name) projectName = meta.name;
+          }
+        } catch {
+          /* ignore corrupt meta */
+        }
+
         recordings.push({
           sessionDir,
-          name: entry.name,
+          name: projectName,
           timestamp: stat.mtimeMs,
           size: stat.size,
           filePath: rawFile,
@@ -589,6 +603,49 @@ function registerIpcHandlers(mainWindow, setSelectedCaptureSource) {
       console.error("[IPC] Failed to delete recording:", err);
       throw err;
     }
+  });
+
+  // ─── Rename Recording ─────────────────────────────────────────────
+
+  ipcMain.handle(IPC.RENAME_RECORDING, async (_event, sessionDir, newName) => {
+    try {
+      if (!sessionDir || !newName)
+        throw new Error("Missing sessionDir or name");
+      const metaPath = path.join(sessionDir, META_FILE);
+      let meta = {};
+      try {
+        if (fs.existsSync(metaPath)) {
+          meta = JSON.parse(fs.readFileSync(metaPath, "utf-8"));
+        }
+      } catch {
+        /* ignore */
+      }
+      meta.name = newName.trim();
+      fs.writeFileSync(metaPath, JSON.stringify(meta, null, 2));
+      console.log(`[IPC] Renamed recording: ${sessionDir} → "${meta.name}"`);
+      return meta.name;
+    } catch (err) {
+      console.error("[IPC] Failed to rename recording:", err);
+      throw err;
+    }
+  });
+
+  // ─── Export Path Dialog ───────────────────────────────────────────
+
+  ipcMain.handle(IPC.PICK_EXPORT_PATH, async (_event, defaultName) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: "Export Recording",
+      defaultPath: path.join(
+        settings.outputDir,
+        (defaultName || "recording") + ".mp4",
+      ),
+      filters: [{ name: "MP4 Video", extensions: ["mp4"] }],
+    });
+
+    if (!result.canceled && result.filePath) {
+      return result.filePath;
+    }
+    return null;
   });
 }
 

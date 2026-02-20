@@ -1,7 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Mono:wght@700&display=swap");
 
 /* ─── Reset ──────────────────────────────────────────────────────── */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   margin: 0;
   padding: 0;
   box-sizing: border-box;
@@ -34,14 +36,15 @@
   --radius-md: 8px;
   --radius-lg: 12px;
 
-  --font-sans: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
-  --font-mono: 'JetBrains Mono', 'Cascadia Code', 'Fira Code', monospace;
+  --font-sans: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
+  --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", monospace;
 
   --transition-fast: 120ms ease;
   --transition-base: 200ms ease;
 }
 
-html, body {
+html,
+body {
   height: 100%;
   overflow: hidden;
 }
@@ -65,10 +68,19 @@ body {
 }
 
 /* ─── Scrollbar ──────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-hover); }
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-hover);
+}
 
 /* ─── Focus ──────────────────────────────────────────────────────── */
 :focus-visible {
@@ -121,6 +133,15 @@ body {
   height: 18px;
   display: block;
   opacity: 0.92;
+}
+
+.titlebar-brand {
+  font-family: "Space Mono", "JetBrains Mono", monospace;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+  margin-right: 4px;
 }
 
 .titlebar .titlebar-nav {

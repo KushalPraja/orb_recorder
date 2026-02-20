@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getRecordings: () => ipcRenderer.invoke(IPC.GET_RECORDINGS),
   deleteRecording: (sessionDir) =>
     ipcRenderer.invoke(IPC.DELETE_RECORDING, sessionDir),
+  renameRecording: (sessionDir, newName) =>
+    ipcRenderer.invoke(IPC.RENAME_RECORDING, sessionDir, newName),
 
   // ─── Screen sources ────────────────────────────────────────────────
   getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),
@@ -72,6 +74,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   // ─── Dialogs & shell ──────────────────────────────────────────────
   pickOutputDir: () => ipcRenderer.invoke(IPC.PICK_OUTPUT_DIR),
+  pickExportPath: (defaultName) =>
+    ipcRenderer.invoke(IPC.PICK_EXPORT_PATH, defaultName),
   openOutput: (filePath) => ipcRenderer.invoke(IPC.OPEN_OUTPUT, filePath),
   openSettings: () => ipcRenderer.invoke(IPC.OPEN_SETTINGS),
 });

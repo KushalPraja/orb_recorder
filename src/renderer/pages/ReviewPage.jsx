@@ -13,6 +13,9 @@ import {
   Sparkles,
   SkipBack,
   SkipForward,
+  ArrowLeft,
+  RotateCcw,
+  FolderOpen,
 } from "lucide-react";
 import "./ReviewPage.css";
 
@@ -32,8 +35,14 @@ const GRADIENT_PRESETS = [
 ];
 
 const COLOR_PRESETS = [
-  "#1e293b", "#18181b", "#2a2a2a", "#3a3a3a",
-  "#d4d4d4", "#f8fafc", "#0f172a", "#450a0a",
+  "#1e293b",
+  "#18181b",
+  "#2a2a2a",
+  "#3a3a3a",
+  "#d4d4d4",
+  "#f8fafc",
+  "#0f172a",
+  "#450a0a",
 ];
 
 const WALLPAPERS = [
@@ -161,8 +170,7 @@ function VideoTrimmer({
     e.preventDefault();
     e.stopPropagation();
     setDragging(type);
-    document.body.style.cursor =
-      type === "playhead" ? "grabbing" : "ew-resize";
+    document.body.style.cursor = type === "playhead" ? "grabbing" : "ew-resize";
   }, []);
 
   const handleTrackClick = useCallback(
@@ -247,23 +255,23 @@ function VideoTrimmer({
         <div className="trimmer-thumbs">
           {thumbsLoaded && thumbnails.length > 0
             ? thumbnails.map((src, i) =>
-              src ? (
-                <img
-                  key={i}
-                  src={src}
-                  className="trimmer-thumb"
-                  draggable={false}
-                  alt=""
-                />
-              ) : (
-                <div key={i} className="trimmer-thumb trimmer-thumb--empty" />
-              ),
-            )
+                src ? (
+                  <img
+                    key={i}
+                    src={src}
+                    className="trimmer-thumb"
+                    draggable={false}
+                    alt=""
+                  />
+                ) : (
+                  <div key={i} className="trimmer-thumb trimmer-thumb--empty" />
+                ),
+              )
             : !thumbsLoaded && (
-              <div className="trimmer-thumbs-loading">
-                <div className="trimmer-thumbs-shimmer" />
-              </div>
-            )}
+                <div className="trimmer-thumbs-loading">
+                  <div className="trimmer-thumbs-shimmer" />
+                </div>
+              )}
         </div>
 
         {/* Dimmed regions outside selection */}
@@ -343,7 +351,9 @@ function VideoTrimmer({
           </button>
         </div>
         <div className="trimmer-controls-right">
-          <span className="trimmer-time-current">{formatTime(currentTime)}</span>
+          <span className="trimmer-time-current">
+            {formatTime(currentTime)}
+          </span>
           <span className="trimmer-time-sep">/</span>
           <span className="trimmer-time-total">{formatTime(clipDuration)}</span>
         </div>
@@ -391,6 +401,9 @@ export function ReviewPage({ data, onNavigate }) {
   const [padding, setPadding] = useState(48);
 
   const videoRef = useRef(null);
+
+  /* Whether we came from the home page (existing project) vs fresh recording */
+  const isExistingProject = !!data?.fromHome;
 
   /* ─── Remux on mount ─────────────────────────────────────────────── */
   useEffect(() => {
@@ -495,27 +508,42 @@ export function ReviewPage({ data, onNavigate }) {
 
   const handleExport = async () => {
     if (!data?.sessionDir) return;
+
+    // Ask user where to save
+    const defaultName = data.name || "recording";
+    const exportPath = await api.pickExportPath(defaultName);
+    if (!exportPath) return; // user cancelled
+
     setProcessing(true);
     setError(null);
     setProgress(0);
+    setDone(false);
+    setOutputPath(null);
 
     const isTrimmed =
       trimStart > 0.1 || (videoDuration > 0 && trimEnd < videoDuration - 0.1);
 
     const exportOpts = {
       sessionDir: data.sessionDir,
+      exportPath,
       autoZoom,
       background: bgEnabled,
       cornerRadius: bgEnabled ? cornerRadius : 0,
       padding: bgEnabled ? padding : 0,
-      backgroundType:
-        !bgEnabled ? "none" :
-          bgType === "color" ? "solid" :
-            bgType === "gradient" ? "gradient" : "image",
+      backgroundType: !bgEnabled
+        ? "none"
+        : bgType === "color"
+          ? "solid"
+          : bgType === "gradient"
+            ? "gradient"
+            : "image",
       backgroundColor: bgEnabled && bgType === "color" ? bgColor : undefined,
-      gradientStart: bgEnabled && bgType === "gradient" ? gradient.start : undefined,
-      gradientEnd: bgEnabled && bgType === "gradient" ? gradient.end : undefined,
-      wallpaperFile: bgEnabled && bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
+      gradientStart:
+        bgEnabled && bgType === "gradient" ? gradient.start : undefined,
+      gradientEnd:
+        bgEnabled && bgType === "gradient" ? gradient.end : undefined,
+      wallpaperFile:
+        bgEnabled && bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
       imageBlur: bgEnabled && bgType === "image" ? imageBlur : "none",
       ...(isTrimmed && { trimStart, trimEnd }),
     };
@@ -529,11 +557,20 @@ export function ReviewPage({ data, onNavigate }) {
   };
 
   const handleDiscard = async () => {
-    if (data?.sessionDir) {
-      try {
-        await api.deleteRecording(data.sessionDir);
-      } catch { }
+    if (!data?.sessionDir) {
+      onNavigate("home");
+      return;
     }
+    
+    try {
+      setProcessing(true);
+      await api.deleteRecording(data.sessionDir);
+    } catch (err) {
+      setError(err?.message || "Failed to delete project");
+      setProcessing(false);
+      return;
+    }
+    setProcessing(false);
     onNavigate("home");
   };
 
@@ -541,15 +578,27 @@ export function ReviewPage({ data, onNavigate }) {
     if (outputPath) api.openOutput(outputPath);
   };
 
-  /* ─── Preview background CSS ─────────────────────────────────────── */
-  const previewCanvasBg =
-    !bgEnabled ? "var(--bg-secondary)" :
-      bgType === "color" ? bgColor :
-        bgType === "gradient" ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` :
-          bgType === "image" ? "transparent" :
-            "var(--bg-secondary)";
+  const handleReExport = () => {
+    setDone(false);
+    setOutputPath(null);
+    setProgress(0);
+    setPhase("");
+    setError(null);
+  };
 
-  const blurPx = imageBlur === "moderate" ? 10 : imageBlur === "strong" ? 24 : 0;
+  /* ─── Preview background CSS ─────────────────────────────────────── */
+  const previewCanvasBg = !bgEnabled
+    ? "var(--bg-secondary)"
+    : bgType === "color"
+      ? bgColor
+      : bgType === "gradient"
+        ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`
+        : bgType === "image"
+          ? "transparent"
+          : "var(--bg-secondary)";
+
+  const blurPx =
+    imageBlur === "moderate" ? 10 : imageBlur === "strong" ? 24 : 0;
 
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
 
@@ -591,7 +640,14 @@ export function ReviewPage({ data, onNavigate }) {
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="rv-header">
         <div className="rv-header-left">
-          <h2>Export</h2>
+          <button
+            className="rv-back-btn"
+            onClick={() => onNavigate("home")}
+            title="Back to projects"
+          >
+            <ArrowLeft size={14} />
+          </button>
+          <h2>{data.name || "Export"}</h2>
           <div className="rv-header-badges">
             {data.size && (
               <span className="rv-badge rv-badge--muted">
@@ -710,8 +766,7 @@ export function ReviewPage({ data, onNavigate }) {
                 </label>
               </div>
             </div>
-            
-            
+
             <div className="rv-section-body">
               {/* Toggle row — same pattern as Auto-Zoom */}
               <div className="rv-option-row">
@@ -719,7 +774,9 @@ export function ReviewPage({ data, onNavigate }) {
                   <Layers size={12} className="rv-option-icon" />
                   <div className="rv-option-text">
                     <span className="rv-option-name">Background</span>
-                    <span className="rv-option-desc">Add canvas behind video</span>
+                    <span className="rv-option-desc">
+                      Add canvas behind video
+                    </span>
                   </div>
                 </div>
                 <label className="rv-toggle">
@@ -744,7 +801,11 @@ export function ReviewPage({ data, onNavigate }) {
                         className={`rv-bg-type-btn ${bgType === t ? "active" : ""}`}
                         onClick={() => setBgType(t)}
                       >
-                        {t === "color" ? "Color" : t === "gradient" ? "Gradient" : "Image"}
+                        {t === "color"
+                          ? "Color"
+                          : t === "gradient"
+                            ? "Gradient"
+                            : "Image"}
                       </button>
                     ))}
                   </div>
@@ -785,7 +846,9 @@ export function ReviewPage({ data, onNavigate }) {
                         <button
                           key={i}
                           className={`rv-swatch ${gradientIdx === i ? "active" : ""}`}
-                          style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
+                          style={{
+                            background: `linear-gradient(135deg, ${g.start}, ${g.end})`,
+                          }}
                           title={g.name}
                           onClick={() => setGradientIdx(i)}
                         />
@@ -804,8 +867,12 @@ export function ReviewPage({ data, onNavigate }) {
                           <button
                             key={i}
                             className={`rv-wallpaper-thumb ${wallpaperIdx === i ? "active" : ""}`}
-                            style={{ backgroundImage: `url(./Wallpapers/${w})` }}
-                            title={w.replace(/-thumb\.(jpg|jpeg)$/i, "").replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
+                            style={{
+                              backgroundImage: `url(./Wallpapers/${w})`,
+                            }}
+                            title={w
+                              .replace(/-thumb\.(jpg|jpeg)$/i, "")
+                              .replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
                             onClick={() => setWallpaperIdx(i)}
                           />
                         ))}
@@ -864,9 +931,19 @@ export function ReviewPage({ data, onNavigate }) {
             <div className="rv-panel-footer">
               {done ? (
                 <>
-                  <button className="rv-btn rv-btn--primary" onClick={handleOpen}>
-                    <Check size={14} />
-                    <span>Open Output</span>
+                  <button
+                    className="rv-btn rv-btn--primary"
+                    onClick={handleOpen}
+                  >
+                    <FolderOpen size={14} />
+                    <span>Show in Folder</span>
+                  </button>
+                  <button
+                    className="rv-btn rv-btn--secondary"
+                    onClick={handleReExport}
+                  >
+                    <RotateCcw size={14} />
+                    <span>Re-export</span>
                   </button>
                   <button
                     className="rv-btn rv-btn--secondary"
@@ -889,6 +966,7 @@ export function ReviewPage({ data, onNavigate }) {
                       </>
                     ) : (
                       <>
+                        <Download size={14} />
                         <span>Export</span>
                       </>
                     )}
@@ -898,7 +976,7 @@ export function ReviewPage({ data, onNavigate }) {
                     onClick={handleDiscard}
                     disabled={processing}
                   >
-                    <span>Discard</span>
+                    <span>{"Discard"}</span>
                   </button>
                 </>
               )}
@@ -911,10 +989,7 @@ export function ReviewPage({ data, onNavigate }) {
       {processing && (
         <div className="rv-progress">
           <div className="rv-progress-bar">
-            <div
-              className="rv-progress-fill"
-              style={{ width: `${progress}%` }}
-            >
+            <div className="rv-progress-fill" style={{ width: `${progress}%` }}>
               <div className="rv-progress-glow" />
             </div>
           </div>

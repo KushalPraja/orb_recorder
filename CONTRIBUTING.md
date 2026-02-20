@@ -1,4 +1,4 @@
-# Contributing to Screen Recorder
+# Contributing to ORB
 
 Thank you for taking the time to contribute! This document covers everything
 you need to understand the codebase, get a dev environment running, and submit

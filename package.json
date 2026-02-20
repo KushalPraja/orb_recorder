@@ -1,5 +1,6 @@
 {
-  "name": "screen-recorder",
+  "name": "orb",
+  "productName": "Orb",
   "version": "1.0.0",
   "description": "Desktop screen recorder with auto zoom/pan effects on clicks and scrolls",
   "author": "Kushal Prajapati",

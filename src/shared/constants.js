@@ -48,6 +48,7 @@ const EVENTS_FILE = "events.json";
 const OUTPUT_FILE = "output.mp4";
 const CLEAN_MP4_FILE = "preview.mp4";
 const SETTINGS_FILE = "settings.json";
+const META_FILE = "meta.json";
 
 // ─── IPC channel names ────────────────────────────────────────────────────────
 // Defined once here and imported by both preload.js and ipc-handlers.js.
@@ -69,6 +70,10 @@ const IPC = {
   // Library management
   GET_RECORDINGS: "recordings:list",
   DELETE_RECORDING: "recordings:delete",
+  RENAME_RECORDING: "recordings:rename",
+
+  // Export
+  PICK_EXPORT_PATH: "dialog:pickExportPath",
 
   // Screen sources
   GET_SOURCES: "sources:list",
@@ -116,6 +121,7 @@ module.exports = {
   OUTPUT_FILE,
   CLEAN_MP4_FILE,
   SETTINGS_FILE,
+  META_FILE,
 
   // IPC
   IPC,

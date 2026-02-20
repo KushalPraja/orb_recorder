@@ -1,3 +1,7 @@
+/* ═══════════════════════════════════════════════════════════════════
+   HomePage — flat, square, monochrome — matches ReviewPage aesthetic
+   ═══════════════════════════════════════════════════════════════════ */
+
 .home-page {
   display: flex;
   flex-direction: column;
@@ -5,224 +9,272 @@
   overflow: hidden;
 }
 
-.home-header {
+/* ─── Header ─────────────────────────────────────────────────────── */
+
+.hp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 20px 20px 16px;
+  padding: 10px 16px 8px;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.home-header-left {
+.hp-header-left {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.home-header h1 {
-  font-size: 16px;
+.hp-header h2 {
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-primary);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.recording-count {
-  font-size: 11px;
+.hp-count {
+  font-size: 10px;
   font-weight: 500;
+  font-family: var(--font-mono);
   color: var(--text-tertiary);
   background: var(--bg-tertiary);
   padding: 1px 6px;
+  border: 1px solid var(--border);
+  letter-spacing: 0.04em;
 }
 
-.btn-new-recording {
+/* ─── New Recording button ───────────────────────────────────────── */
+
+.hp-new-btn {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 7px 14px;
-  background: var(--text-primary);
-  color: var(--bg-primary);
-  border: none;
-  font-size: 12px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: opacity var(--transition-fast);
+  transition: all 0.1s ease;
+  letter-spacing: 0.02em;
 }
 
-.btn-new-recording:hover {
-  opacity: 0.85;
+.hp-new-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-hover);
 }
 
-.btn-new-recording:active {
-  opacity: 0.7;
+.hp-new-btn:active {
+  background: var(--bg-active);
 }
 
-/* ─── Recordings List ────────────────────────────────────────────── */
+.hp-new-btn--ghost {
+  margin-top: 8px;
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
 
-.recordings-list {
+.hp-new-btn--ghost:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* ─── Project List ───────────────────────────────────────────────── */
+
+.hp-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0 20px 20px;
 }
 
-.recording-item {
-  position: relative;
+/* ─── Project Card ───────────────────────────────────────────────── */
+
+.hp-card {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 14px;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition: background 0.1s ease;
+  position: relative;
 }
 
-.recording-item:hover {
+.hp-card:hover {
   background: var(--bg-secondary);
 }
 
-.recording-thumbnail { display: none; }
+.hp-card:active {
+  background: var(--bg-tertiary);
+}
 
-.recording-info { flex: 1; min-width: 0; }
-
-/* Mini-player modal (opens on click) */
-.mini-player-modal {
-  position: fixed;
-  inset: 0;
+/* Icon */
+.hp-card-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(2,2,2,0.55);
-  z-index: 120;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
 }
 
-.mini-player-content {
-  width: min(960px, 94%);
-  max-height: 92vh;
-  background: var(--bg-primary);
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.04);
-  box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-  display: flex;
-  flex-direction: column;
-}
-
-.mini-player-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  border-bottom: 1px solid rgba(255,255,255,0.02);
-}
-
-.mini-player-close {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  padding: 6px 8px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.mini-player-close:hover { color: var(--text-primary); background: var(--bg-tertiary); }
-
-.mini-player-video {
-  width: 100%;
-  height: min(68vh, 560px);
-  background: #000;
-  border: none;
-}
-
-@media (max-width: 900px) {
-  .recording-item { padding: 10px; }
-  .mini-player-content { width: 100%; height: 100%; border-radius: 0; }
-}
-
-.recording-info {
+/* Body: name + metadata */
+.hp-card-body {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.recording-name {
-  font-size: 13px;
+.hp-card-name {
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-primary);
-  display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.recording-meta {
+.hp-card-meta {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 2px;
 }
 
-.meta-item {
+.hp-meta-item {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 11px;
-  color: var(--text-tertiary);
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  letter-spacing: 0.02em;
 }
 
-.recording-actions {
+/* Chevron */
+.hp-card-chevron {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.hp-card:hover .hp-card-chevron {
+  opacity: 1;
+}
+
+/* ─── Card Actions ───────────────────────────────────────────────── */
+
+.hp-card-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   opacity: 0;
-  transition: opacity var(--transition-fast);
+  transition: opacity 0.1s ease;
 }
 
-.recording-item:hover .recording-actions {
+.hp-card:hover .hp-card-actions {
   opacity: 1;
 }
 
-.icon-btn {
-  background: none;
-  border: none;
-  color: var(--text-tertiary);
-  cursor: pointer;
-  padding: 6px;
-  border-radius: var(--radius-sm);
+.hp-action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: 1px solid transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.1s ease;
 }
 
-.icon-btn:hover {
-  background: var(--bg-hover);
+.hp-action-btn:hover {
+  background: var(--bg-tertiary);
   color: var(--text-secondary);
+  border-color: var(--border);
 }
 
-.icon-btn-danger:hover {
+.hp-action-btn--danger:hover {
   background: var(--danger-muted);
   color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.hp-action-btn--danger-active {
+  background: var(--danger-muted);
+  color: var(--danger);
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+/* ─── Inline Rename ──────────────────────────────────────────────── */
+
+.hp-rename-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.hp-rename-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-hover);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  padding: 2px 6px;
+  width: 100%;
+  outline: none;
+}
+
+.hp-rename-input:focus {
+  border-color: var(--text-tertiary);
 }
 
 /* ─── Empty State ────────────────────────────────────────────────── */
 
-.empty-state {
+.hp-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  gap: 8px;
+  padding: 80px 20px;
+  gap: 6px;
 }
 
-.empty-icon {
+.hp-empty-icon {
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
-.empty-title {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.empty-text {
+.hp-empty-title {
   font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.hp-empty-text {
+  font-size: 11px;
   color: var(--text-tertiary);
+}
+
+/* ─── Responsive ─────────────────────────────────────────────────── */
+
+@media (max-width: 600px) {
+  .hp-card {
+    padding: 10px 12px;
+  }
+  .hp-card-icon {
+    display: none;
+  }
 }

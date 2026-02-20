@@ -1,6 +1,6 @@
 module.exports = {
   packagerConfig: {
-    name: "ScreenRecorder",
+    name: "Orb",
     icon: "./assets/icons/Document",
 
     asar: {
@@ -35,7 +35,7 @@ module.exports = {
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "ScreenRecorder",
+        name: "Orb",
       },
     },
   ],

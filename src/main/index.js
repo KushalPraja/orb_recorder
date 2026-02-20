@@ -26,7 +26,7 @@ function createWindow() {
     minWidth: 980,
     minHeight: 620,
     resizable: true,
-    title: "Screen Recorder",
+    title: "Orb",
     icon: path.join(__dirname, "..", "..", "assets", "icons", "Document.ico"),
     backgroundColor: "#0a0a0a",
     titleBarStyle: "hidden",
