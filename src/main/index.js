@@ -2,6 +2,10 @@
 // registers IPC handlers, and manages the app lifecycle.
 
 const { app, BrowserWindow, session, desktopCapturer } = require("electron");
+
+if (require("electron-squirrel-startup")) {
+  app.quit();
+}
 const path = require("path");
 const fs = require("fs");
 const { registerIpcHandlers } = require("./ipc-handlers");
@@ -13,7 +17,6 @@ function setSelectedCaptureSource(sourceId) {
   selectedCaptureSourceId = sourceId || null;
 }
 
-// Detect if running in dev mode (vite dev server)
 const isDev = process.argv.includes("--dev");
 
 function createWindow() {
