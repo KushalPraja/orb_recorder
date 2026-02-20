@@ -101,13 +101,12 @@ export function RecordPage({ onNavigate }) {
 
       let mimeType = "video/webm; codecs=vp9";
       if (!MediaRecorder.isTypeSupported(mimeType))
-        console.log("vp9 not supported, trying vp8");
       mimeType = "video/webm;codecs=vp8";
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";
 
       const recorder = new MediaRecorder(stream, {
         mimeType,
-        videoBitsPerSecond: 20_000_000,
+        videoBitsPerSecond: 6_000_000,
       });
 
       recorder.ondataavailable = (e) => {

@@ -28,10 +28,10 @@ function createWindow() {
     resizable: true,
     title: "Orb",
     icon: path.join(__dirname, "..", "..", "assets", "icons", "Document.ico"),
-    backgroundColor: "#0a0a0a",
+    backgroundColor: "#0f1214",
     titleBarStyle: "hidden",
     titleBarOverlay: {
-      color: "#0a0a0a",
+      color: "#0f1214",
       symbolColor: "#888888",
       height: 32,
     },
