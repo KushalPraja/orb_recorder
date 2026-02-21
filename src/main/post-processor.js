@@ -15,13 +15,15 @@ const {
   RAW_RECORDING_FILE,
   CLEAN_MP4_FILE,
   OUTPUT_FILE,
+  META_FILE,
   DEFAULT_SETTINGS,
 } = require("../shared/constants");
 const {
   getFfmpegPath,
-  remuxToCleanMp4,
   applyVisualExport,
   trimVideo,
+  muxAudioInto,
+  getBestH264Encoder,
 } = require("./ffmpeg-utils");
 
 /* ─── Resolve binaries ─────────────────────────────────────────────── */
@@ -79,10 +81,17 @@ function getScriptPath() {
 
 /* ─── Run the Python / binary auto-zoom processor ──────────────────── */
 
-function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
+function runPythonProcessor(
+  inputPath,
+  eventsPath,
+  metaPath,
+  outputPath,
+  opts = {},
+) {
   const {
     zoom = 2.0,
     hold = 1.5,
+    encoder = "libx264",
     onProgress,
     withBackground = false,
     padding = 48,
@@ -105,6 +114,13 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
       new Error("Auto-zoom processor not found (checked binary and script)."),
     );
   }
+
+  // Meta-file flags — always passed so the processor can read capture origin
+  const metaArgs =
+    metaPath && fs.existsSync(metaPath) ? ["--meta", metaPath] : [];
+
+  // Encoder flag — use GPU encoder when available for faster processing
+  const encoderArgs = ["--encoder", encoder];
 
   // Background flags — only appended when compositing is requested
   const bgArgs = withBackground
@@ -140,6 +156,8 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
         String(hold),
         "--ffmpeg",
         ffmpegBin,
+        ...encoderArgs,
+        ...metaArgs,
         ...bgArgs,
       ]
     : [
@@ -153,6 +171,8 @@ function runPythonProcessor(inputPath, eventsPath, outputPath, opts = {}) {
         String(hold),
         "--ffmpeg",
         ffmpegBin,
+        ...encoderArgs,
+        ...metaArgs,
         ...bgArgs,
       ];
 
@@ -234,51 +254,38 @@ async function processVideo(opts) {
 
   const inputPath = path.join(recordingDir, RAW_RECORDING_FILE);
   const eventsPath = path.join(recordingDir, EVENTS_FILE);
-  const outPath = outputPath || path.join(recordingDir, OUTPUT_FILE);
+  const metaPath = path.join(recordingDir, META_FILE);
+  const outPath = outputPath ?? path.join(recordingDir, OUTPUT_FILE);
 
   if (!fs.existsSync(inputPath)) {
     throw new Error(`Recording not found: ${inputPath}`);
   }
 
-  const targetFps = Number(fps) || DEFAULT_SETTINGS.fps;
-
-  // ── Phase 1: Get a clean CFR MP4 (0-30%) ──────────────────────────
-  // If review-page already remuxed a preview.mp4, reuse it to skip work.
-  const previewPath = path.join(recordingDir, CLEAN_MP4_FILE);
-  const cleanPath = path.join(recordingDir, "__intermediate_clean.mp4");
-  const intermediates = [];
-
-  if (fs.existsSync(previewPath)) {
-    console.log(`[PostProcessor] Reusing cached preview → ${previewPath}`);
-    if (onProgress) onProgress({ percent: 30, phase: "Using cached preview…" });
-    // Don't add previewPath to intermediates — we want to keep it
-  } else {
-    if (onProgress) onProgress({ percent: 0, phase: "Normalizing recording…" });
-    console.log(`[PostProcessor] Remuxing → ${cleanPath}`);
-    intermediates.push(cleanPath);
-    try {
-      await remuxToCleanMp4(
-        inputPath,
-        cleanPath,
-        (p) => {
-          if (onProgress && Number.isFinite(p.percent)) {
-            onProgress({
-              percent: Math.min(30, Math.round(p.percent * 0.3)),
-              phase: "Normalizing recording…",
-            });
-          }
-        },
-        targetFps,
-      );
-    } catch (err) {
-      intermediates.forEach(safeUnlink);
-      throw err;
-    }
+  /** @param {number} n  @param {number} fallback */
+  function validNum(n, fallback) {
+    const v = Number(n);
+    return Number.isFinite(v) && v > 0 ? v : fallback;
   }
 
-  let currentInput = fs.existsSync(previewPath) ? previewPath : cleanPath;
+  const targetFps = validNum(fps, DEFAULT_SETTINGS.fps);
 
-  // ── Phase 1.5: Trim (optional, 30-40%) ────────────────────────────
+  // Detect best available hardware encoder once per export (cached after first call)
+  const encoder = await getBestH264Encoder();
+
+  // ── Phase 1: Locate the clean preview MP4 (always present) ───────────
+  const previewPath = path.join(recordingDir, CLEAN_MP4_FILE);
+  const intermediates = [];
+
+  if (!fs.existsSync(previewPath)) {
+    throw new Error(
+      `preview.mp4 not found at ${previewPath}. Open the recording in the editor first to generate it.`,
+    );
+  }
+
+  if (onProgress) onProgress({ percent: 0, phase: "Loading recording…" });
+  let currentInput = previewPath;
+
+  // ── Phase 1.5: Trim (optional, 0-15%) ────────────────────────────
   const isTrimmed =
     Number.isFinite(trimStart) &&
     Number.isFinite(trimEnd) &&
@@ -288,7 +295,7 @@ async function processVideo(opts) {
   if (isTrimmed) {
     const trimmedPath = path.join(recordingDir, "__intermediate_trimmed.mp4");
     intermediates.push(trimmedPath);
-    if (onProgress) onProgress({ percent: 30, phase: "Trimming…" });
+    if (onProgress) onProgress({ percent: 0, phase: "Trimming…" });
     console.log(
       `[PostProcessor] Trimming ${trimStart.toFixed(2)}s → ${trimEnd.toFixed(2)}s`,
     );
@@ -297,7 +304,7 @@ async function processVideo(opts) {
       await trimVideo(currentInput, trimmedPath, trimStart, trimEnd, (p) => {
         if (onProgress && Number.isFinite(p.percent)) {
           onProgress({
-            percent: Math.min(40, 30 + Math.round(p.percent * 0.1)),
+            percent: Math.min(15, Math.round(p.percent * 0.15)),
             phase: "Trimming…",
           });
         }
@@ -309,28 +316,33 @@ async function processVideo(opts) {
     }
   }
 
-  // ── Phase 2: Auto-zoom (optional, 40-95%) ────────────────────────
+  // ── Phase 2: Auto-zoom (optional, 15-95%) ────────────────
   if (autoZoom) {
     const zoomOut = path.join(recordingDir, "__intermediate_zoom.mp4");
     intermediates.push(zoomOut);
+
+    // Save the current source so we can merge its audio back after Python
+    // (Python/OpenCV only writes video — audio is stripped during processing)
+    const audioSourceBeforePython = currentInput;
 
     const phaseLabel = background
       ? "Applying zoom + background…"
       : "Applying auto-zoom…";
 
-    if (onProgress) onProgress({ percent: 40, phase: phaseLabel });
+    if (onProgress) onProgress({ percent: 15, phase: phaseLabel });
     console.log(
       `[PostProcessor] Auto-zoom${background ? " + background" : ""} → ${zoomOut}`,
     );
 
     try {
-      await runPythonProcessor(currentInput, eventsPath, zoomOut, {
-        zoom: Number(zoomFactor) || DEFAULT_SETTINGS.zoomFactor,
-        hold: Number(zoomDuration) || DEFAULT_SETTINGS.zoomDuration,
+      await runPythonProcessor(currentInput, eventsPath, metaPath, zoomOut, {
+        zoom: validNum(zoomFactor, DEFAULT_SETTINGS.zoomFactor),
+        hold: validNum(zoomDuration, DEFAULT_SETTINGS.zoomDuration),
+        encoder,
         onProgress: (pct) => {
           if (onProgress) {
             onProgress({
-              percent: Math.min(95, 40 + Math.round(pct * 0.55)),
+              percent: Math.min(95, 15 + Math.round(pct * 0.8)),
               phase: phaseLabel,
             });
           }
@@ -347,20 +359,36 @@ async function processVideo(opts) {
         imageBlur,
       });
       currentInput = zoomOut;
+
+      // Python outputs video-only; merge audio back from the pre-zoom source
+      const zoomAudio = path.join(
+        recordingDir,
+        "__intermediate_zoom_audio.mp4",
+      );
+      intermediates.push(zoomAudio);
+      try {
+        await muxAudioInto(zoomOut, audioSourceBeforePython, zoomAudio);
+        currentInput = zoomAudio;
+      } catch (audioErr) {
+        console.warn(
+          "[PostProcessor] Audio merge after zoom failed (continuing video-only):",
+          audioErr.message,
+        );
+      }
     } catch (err) {
       intermediates.forEach(safeUnlink);
       throw err;
     }
   }
 
-  // ── Phase 3: Visual polish (optional, 40-95%) ─────────────────────
+  // ── Phase 3: Visual polish (optional, 15-95%) ──────────────────—
   // Only runs when background is requested WITHOUT auto-zoom.
   // When autoZoom is also true, Python already composited in Phase 2.
 
   if (background && !autoZoom) {
     const visualOut = outPath; // write directly to final (no zoom step)
 
-    if (onProgress) onProgress({ percent: 40, phase: "Applying background…" });
+    if (onProgress) onProgress({ percent: 15, phase: "Applying background…" });
     console.log(`[PostProcessor] Visual export → ${visualOut}`);
 
     try {
@@ -380,11 +408,12 @@ async function processVideo(opts) {
         (p) => {
           if (onProgress && Number.isFinite(p.percent)) {
             onProgress({
-              percent: Math.min(95, 40 + Math.round((p.percent * 55) / 100)),
+              percent: Math.min(95, 15 + Math.round((p.percent * 80) / 100)),
               phase: "Applying background…",
             });
           }
         },
+        encoder,
       );
       currentInput = visualOut;
     } catch (err) {

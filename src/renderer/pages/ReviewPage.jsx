@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import {
   Download,
-  Check,
   Loader2,
-  Trash2,
   Film,
   Layers,
   Play,
@@ -561,7 +559,7 @@ export function ReviewPage({ data, onNavigate }) {
       onNavigate("home");
       return;
     }
-    
+
     try {
       setProcessing(true);
       await api.deleteRecording(data.sessionDir);

@@ -1,7 +1,7 @@
 // Global mouse click + scroll tracker using uiohook-napi
 // Runs in the main process to capture events even when the app window is unfocused.
 
-const { uIOhook, UiohookKey } = require("uiohook-napi");
+const { uIOhook } = require("uiohook-napi");
 const { SCROLL_COOLDOWN } = require("../shared/constants");
 
 class InputTracker {
@@ -64,13 +64,6 @@ class InputTracker {
       `[InputTracker] Stopped — captured ${this.events.length} events`,
     );
     return this.events;
-  }
-
-  /**
-   * Get the current list of events (non-destructive).
-   */
-  getEvents() {
-    return [...this.events];
   }
 
   // ─── Internal Handlers ────────────────────────────────────────────────

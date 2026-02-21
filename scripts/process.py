@@ -359,6 +359,27 @@ def update_camera_for_frame(camera, clicks, scrolls, moves, t, zoom_factor, hold
             camera.ty = max(0, min(camera.frame_h, camera.ty + offset))
 
 
+# ─── Click debouncing ────────────────────────────────────────────────
+
+
+def debounce_clicks(clicks, gap_sec=0.4):
+    if not clicks:
+        return clicks
+
+    result = []
+    burst = [clicks[0]]
+
+    for click in clicks[1:]:
+        if click["timestamp"] - burst[-1]["timestamp"] <= gap_sec:
+            burst.append(click)
+        else:
+            result.append(burst[-1])
+            burst = [click]
+
+    result.append(burst[-1])
+    return result
+
+
 # ─── Main processor ─────────────────────────────────────────────────
 
 
@@ -369,6 +390,8 @@ def process_video(
     zoom_factor=2.0,
     hold_duration=1.5,
     ffmpeg_path="ffmpeg",
+    ffmpeg_encoder="libx264",
+    meta_path=None,
     # Background compositing (composite-first zoom)
     with_background=False,
     padding=48,
@@ -386,10 +409,47 @@ def process_video(
         with open(events_path, "r") as f:
             events = json.load(f)
 
+    # ── Load capture-source origin from meta.json ─────────────────
+    # The origin is the screen-space top-left corner of the recorded area.
+    # All uiohook events are in global (logical / DIP) screen coordinates,
+    # so we subtract the origin then multiply by the DPI scale factor to get
+    # coordinates in the video’s physical-pixel space.
+    origin_x = 0
+    origin_y = 0
+    scale_factor = 1.0
+    if meta_path and os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+            origin_x = int(meta.get("originX", 0))
+            origin_y = int(meta.get("originY", 0))
+            source_type = str(meta.get("sourceType", "unknown"))
+            # scaleFactor is written by Electron (display.scaleFactor) and
+            # converts logical → physical pixels.  Fall back to computing it
+            # from captureWidth (logical display width) vs frame_w (physical).
+            sf = meta.get("scaleFactor")
+            cw = meta.get("captureWidth")
+            ch = meta.get("captureHeight")
+            if sf and float(sf) > 0:
+                scale_factor = float(sf)
+            elif cw and int(cw) > 0:
+                # Will be re-evaluated after we know frame_w (below)
+                scale_factor = -1  # sentinel: compute later
+            print(
+                f"[Processor] Capture origin: ({origin_x}, {origin_y}) "
+                f"source_type={source_type}, scaleFactor={scale_factor}",
+                file=sys.stderr,
+            )
+        except Exception as e:
+            print(f"[Processor] Warning: could not parse meta.json: {e}", file=sys.stderr)
+
     clicks = sorted(
         [e for e in events if e.get("type") == "click"],
         key=lambda e: e["timestamp"],
     )
+    # Debounce rapid clicks — burst clicks collapse to a single zoom event
+    clicks = debounce_clicks(clicks, gap_sec=0.4)
+    print(f"[Processor] After debounce: {len(clicks)} click events", file=sys.stderr)
     scrolls = sorted(
         [e for e in events if e.get("type") == "scroll"],
         key=lambda e: e["timestamp"],
@@ -416,6 +476,14 @@ def process_video(
     if total_frames <= 0:
         total_frames = 0  # unknown
 
+    # Finalise DPI scale factor now that we know the video dimensions.
+    if scale_factor < 0:
+        # Sentinel from meta parsing: compute from captureWidth vs frame_w
+        cw_val = int(meta.get("captureWidth", 0)) if meta_path else 0
+        scale_factor = frame_w / cw_val if cw_val > 0 else 1.0
+    if abs(scale_factor - 1.0) > 0.001:
+        print(f"[Processor] DPI scale factor: {scale_factor:.4f}", file=sys.stderr)
+
     # ── Canvas dimensions (source frame + padding on each side) ────
     pad = int(padding) if with_background else 0
     raw_canvas_w = frame_w + pad * 2
@@ -430,12 +498,24 @@ def process_video(
         file=sys.stderr,
     )
 
+    # ── Determine encoder and encoder-specific quality flags ───────
+    # GPU encoders (NVENC, AMF, VideoToolbox) use -qp / -cq instead of -crf.
+    _hw_encoders = {"h264_nvenc", "h264_amf", "h264_videotoolbox", "hevc_nvenc"}
+    _is_hw = ffmpeg_encoder in _hw_encoders
+    _quality_flags = (
+        ["-rc", "vbr", "-cq", "18", "-preset", "p4"]
+        if ffmpeg_encoder == "h264_nvenc"
+        else ["-qp", "18"]
+        if _is_hw
+        else ["-crf", "18", "-preset", "medium"]
+    )
+
+    # simple re-encode fast path (no events, no background)
     if not clicks and not moves and not with_background:
-        print("[Processor] No clicks, moves, or background — simple re-encode", file=sys.stderr)
         subprocess.run(
             [
                 ffmpeg_path, "-y", "-i", input_path,
-                "-c:v", "libx264", "-preset", "medium", "-crf", "18",
+                "-c:v", ffmpeg_encoder, *_quality_flags,
                 "-pix_fmt", "yuv420p", "-movflags", "+faststart",
                 "-an", output_path,
             ],
@@ -446,17 +526,21 @@ def process_video(
         return output_path
 
     # ── Translate event coordinates to canvas space ────────────────
-    # All recorded events are in source-video coordinates (0…frame_w, 0…frame_h).
-    # The camera now operates on the full canvas, so we shift every coordinate
-    # by `pad` so that (0,0) in source maps to (pad, pad) in canvas.
+    # Events are in global screen coordinates (physical pixels on Windows).
+    # Pipeline:  subtract capture origin → multiply by scale → add padding.
+    # When the Node side stores physical-pixel origins (window captures,
+    # screen captures with uiohook), scale_factor is 1.0 and this
+    # simplifies to:  event_pos - origin + padding.
     def _to_canvas(events_list):
         out = []
         for e in events_list:
             ne = dict(e)
             if "x" in ne:
-                ne["x"] = ne["x"] + pad
+                ne["x"] = (ne["x"] - origin_x) * scale_factor + pad
+                ne["x"] = max(pad, min(frame_w + pad, ne["x"]))
             if "y" in ne:
-                ne["y"] = ne["y"] + pad
+                ne["y"] = (ne["y"] - origin_y) * scale_factor + pad
+                ne["y"] = max(pad, min(frame_h + pad, ne["y"]))
             out.append(ne)
         return out
 
@@ -467,6 +551,11 @@ def process_video(
     # ── Pre-build background + corner mask (once, before loop) ───────
     bg_frame    = None
     corner_mask = None
+    # Pre-computed corner regions for fast blending (instead of blending
+    # the entire frame through float32, we only blend the 4 small corner
+    # rectangles where the mask is not fully opaque).
+    _corner_regions = []  # list of (y_slice, x_slice) into the source frame
+    _corner_masks   = []  # matching float32 mask patches
     if with_background:
         print(f"[Processor] Building background ({bg_type}, pad={pad}, radius={corner_radius})", file=sys.stderr)
         bg_frame = build_background_frame(
@@ -482,10 +571,29 @@ def process_video(
         r = max(0, min(int(corner_radius), min(frame_w, frame_h) // 4))
         corner_mask = make_corner_mask(frame_w, frame_h, r)
 
+        # Extract the 4 corner sub-regions where mask < 1.0,
+        # so the frame loop only blends those small patches — not
+        # multiplying the entire WxH frame through float32.
+        if r > 0:
+            _corner_slices = [
+                (slice(0, r),           slice(0, r)),           # top-left
+                (slice(0, r),           slice(frame_w - r, frame_w)),  # top-right
+                (slice(frame_h - r, frame_h), slice(0, r)),           # bottom-left
+                (slice(frame_h - r, frame_h), slice(frame_w - r, frame_w)),  # bottom-right
+            ]
+            for ys, xs in _corner_slices:
+                m = corner_mask[ys, xs]  # (r, r, 1) float32
+                _corner_regions.append((ys, xs))
+                _corner_masks.append(m)
+
     # ── Initialize camera + ripples ──────────────────────────────
     # Camera operates in canvas space so zoom-crop naturally reveals background
     camera = SmoothCamera(out_w, out_h, fps)
-    ripples = [ClickRipple(c["x"] + pad, c["y"] + pad, c["timestamp"]) for c in clicks]
+    # Ripples use the canvas-transformed click coordinates (not raw globals)
+    ripples = [ClickRipple(c["x"], c["y"], c["timestamp"]) for c in clicks_c]
+
+    print(f"[Processor] Starting processing → {output_path}", file=sys.stderr)
+    print(f"[Processor] Args: zoom_factor={zoom_factor}, hold_duration={hold_duration}s, encoder={ffmpeg_encoder}, with_background={with_background}", file=sys.stderr)
 
     # ── Start ffmpeg writer pipe ─────────────────────────────────
     ffmpeg_cmd = [
@@ -496,9 +604,7 @@ def process_video(
         "-pix_fmt", "bgr24",
         "-r", str(fps),
         "-i", "-",
-        "-c:v", "libx264",
-        "-preset", "medium",
-        "-crf", "18",
+        "-c:v", ffmpeg_encoder, *_quality_flags,
         "-pix_fmt", "yuv420p",
         "-movflags", "+faststart",
         "-an",
@@ -512,10 +618,11 @@ def process_video(
         stderr=subprocess.DEVNULL,
     )
 
+    # Pre-allocate reusable canvas buffer to avoid per-frame allocation
+    _canvas_buf = np.empty((out_h, out_w, 3), dtype=np.uint8) if with_background else None
+
     # ── Frame loop ───────────────────────────────────────────────
     frame_idx = 0
-    video_t0 = None
-    last_t = 0.0
     last_pct = -1
     t0 = time.time()
 
@@ -524,25 +631,11 @@ def process_video(
         if not ret:
             break
 
-        # Use actual frame timestamp from container when available.
-        # This avoids large sync drift when CAP_PROP_FPS is inaccurate (common with WebM/VFR).
-        pos_msec = cap.get(cv2.CAP_PROP_POS_MSEC)
-        t_from_pos = None
-        if pos_msec is not None and math.isfinite(pos_msec) and pos_msec >= 0:
-            t_from_pos = pos_msec / 1000.0
-
-        if t_from_pos is not None:
-            if video_t0 is None:
-                video_t0 = t_from_pos
-            t = max(0.0, t_from_pos - video_t0)
-        else:
-            # Fallback clock if timestamp is unavailable
-            t = frame_idx / fps
-
-        # Keep effect timeline monotonic for bad/missing timestamps.
-        if t < last_t:
-            t = last_t
-        last_t = t
+        # Use strict frame-index clock.  The input is always a CFR MP4
+        # (remuxed from the raw VFR WebM by the Node pipeline), so
+        # frame_idx / fps is the authoritative timestamp.  CAP_PROP_POS_MSEC
+        # is unreliable for WebM/VFR containers and can cause drift.
+        t = frame_idx / fps
 
         # Camera logic — uses canvas-space coordinates
         update_camera_for_frame(camera, clicks_c, scrolls_c, moves_c, t, zoom_factor, hold_duration)
@@ -550,17 +643,30 @@ def process_video(
 
         # ── Composite source frame onto canvas (background + recording) ──
         if with_background and bg_frame is not None:
-            canvas = bg_frame.copy()
+            # Reuse buffer — copy background then stamp source on top.
+            np.copyto(_canvas_buf, bg_frame[:out_h, :out_w])
+            canvas = _canvas_buf
 
-            # Apply corner mask to source frame (blend edges with background)
-            src = frame[:frame_h, :frame_w].copy()
-            if corner_mask is not None and corner_mask.shape[:2] == (frame_h, frame_w):
+            src = frame[:frame_h, :frame_w]
+
+            if _corner_regions:
+                # Fast path: copy source wholesale, then blend ONLY the
+                # 4 small corner patches (r×r each) through float32.
+                # ~100x less work than blending the entire frame.
+                canvas[pad:pad + frame_h, pad:pad + frame_w] = src
                 bg_slice = bg_frame[pad:pad + frame_h, pad:pad + frame_w]
-                # Blend: src * mask + bg_slice * (1 - mask)
-                alpha   = corner_mask                  # (H, W, 1) float32
-                src_f   = src.astype(np.float32)
-                bg_f    = bg_slice.astype(np.float32)
-                blended = (src_f * alpha + bg_f * (1.0 - alpha)).astype(np.uint8)
+                for (ys, xs), m in zip(_corner_regions, _corner_masks):
+                    s_patch = src[ys, xs].astype(np.float32)
+                    b_patch = bg_slice[ys, xs].astype(np.float32)
+                    blended = (s_patch * m + b_patch * (1.0 - m)).astype(np.uint8)
+                    canvas[pad + ys.start:pad + ys.stop,
+                           pad + xs.start:pad + xs.stop] = blended
+            elif corner_mask is not None and corner_mask.shape[:2] == (frame_h, frame_w):
+                # Fallback: full-frame blend (only when r=0 with a mask somehow)
+                bg_slice = bg_frame[pad:pad + frame_h, pad:pad + frame_w]
+                alpha = corner_mask
+                blended = (src.astype(np.float32) * alpha +
+                           bg_slice.astype(np.float32) * (1.0 - alpha)).astype(np.uint8)
                 canvas[pad:pad + frame_h, pad:pad + frame_w] = blended
             else:
                 canvas[pad:pad + frame_h, pad:pad + frame_w] = src
@@ -580,7 +686,13 @@ def process_video(
         if cropped.size == 0:
             cropped = canvas
 
-        scaled = cv2.resize(cropped, (out_w, out_h), interpolation=cv2.INTER_LANCZOS4)
+        # Use INTER_AREA for downscaling (fast, good quality) and
+        # INTER_LINEAR for upscaling (much faster than LANCZOS4, good enough).
+        if cw > out_w or ch > out_h:
+            interp = cv2.INTER_AREA
+        else:
+            interp = cv2.INTER_LINEAR
+        scaled = cv2.resize(cropped, (out_w, out_h), interpolation=interp)
 
         # Draw click ripples (already in canvas space)
         for ripple in ripples:
@@ -672,6 +784,14 @@ def main():
         help="Path to wallpaper image (used when --bg-type=image)"
     )
     parser.add_argument(
+        "--encoder", default="libx264",
+        help="FFmpeg video encoder to use (default: libx264, options: h264_nvenc, h264_amf, h264_videotoolbox)"
+    )
+    parser.add_argument(
+        "--meta", default=None,
+        help="Path to meta.json containing capture origin coords for coordinate normalization"
+    )
+    parser.add_argument(
         "--image-blur", default="none", choices=["none", "moderate", "strong"],
         help="Blur strength for image background (default: none)"
     )
@@ -689,6 +809,8 @@ def main():
         zoom_factor=args.zoom,
         hold_duration=args.hold,
         ffmpeg_path=args.ffmpeg,
+        ffmpeg_encoder=args.encoder,
+        meta_path=args.meta,
         with_background=args.background,
         padding=args.padding,
         corner_radius=args.corner_radius,

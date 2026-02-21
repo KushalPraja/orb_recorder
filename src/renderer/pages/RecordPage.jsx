@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Monitor, Circle, Loader2 } from "lucide-react";
+import { Monitor, AppWindow, Loader2, Volume2, VolumeX } from "lucide-react";
+
 import { useSettings } from "../contexts/SettingsContext";
 import "./RecordPage.css";
 
@@ -7,13 +8,23 @@ const api = window.electronAPI;
 
 export function RecordPage({ onNavigate }) {
   const { settings } = useSettings();
+
+  // ── Source picker state ───────────────────────────────────────────────────
   const [sources, setSources] = useState([]);
   const [selectedSource, setSelectedSource] = useState(null);
-  const [previewing, setPreviewing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  /** Active tab: show display sources or window sources */
+  const [activeTab, setActiveTab] = useState(
+    /** @type {"screens"|"windows"} */ ("screens"),
+  );
+
+  // ── Audio state ───────────────────────────────────────────────────────────
+  const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
+
+  // ── Recording state ───────────────────────────────────────────────────────
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [status, setStatus] = useState("Select a screen to record");
-  const [loading, setLoading] = useState(true);
 
   const mediaRecorderRef = useRef(null);
   const streamRef = useRef(null);
@@ -21,15 +32,16 @@ export function RecordPage({ onNavigate }) {
   const timerRef = useRef(null);
   const sessionRef = useRef(null);
   const discardingRef = useRef(false);
+  const videoStartTimeRef = useRef(null);
 
-  // Load available screen sources
+  // ── Load screen/window sources ────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const srcs = await api.getSources();
         if (!cancelled) {
-          setSources(srcs || []);
+          setSources(Array.isArray(srcs) ? srcs : []);
           setLoading(false);
         }
       } catch (err) {
@@ -45,21 +57,25 @@ export function RecordPage({ onNavigate }) {
     };
   }, []);
 
-  // Cleanup on unmount
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
+      streamRef.current?.getTracks().forEach((t) => t.stop());
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, []);
 
-  const selectSource = useCallback(async (source) => {
+  // ── Source selection ──────────────────────────────────────────────────────
+  const selectSource = useCallback((source) => {
     setSelectedSource(source);
-    setPreviewing(false); // no live preview, just select
     setStatus("Source selected — click Record to start");
   }, []);
+
+  // Derived: split sources into displays vs windows for the two tabs
+  const displaySources = sources.filter((s) => s.type === "screen");
+  const windowSources = sources.filter((s) => s.type === "window");
+  const visibleSources =
+    activeTab === "screens" ? displaySources : windowSources;
 
   const startRecording = useCallback(async () => {
     if (!selectedSource) return;
@@ -67,14 +83,25 @@ export function RecordPage({ onNavigate }) {
     let stream = streamRef.current;
     await api.setCaptureSource(selectedSource.id);
 
-    // If no stream, acquire one
+    // ── Acquire display/window capture stream ─────────────────────────────
     if (!stream || stream.getTracks().every((t) => t.readyState !== "live")) {
       try {
-        // fps comes from SettingsContext — no extra IPC round-trip needed
-        const fps = settings.fps;
-        stream = await navigator.mediaDevices.getDisplayMedia({
-          video: { frameRate: { ideal: fps } },
-          audio: false,
+        // In Electron, getUserMedia with chromeMediaSource/chromeMediaSourceId
+        // is the correct way to capture a specific desktopCapturer source.
+        // getDisplayMedia would show the system picker and ignore our selection.
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            mandatory: {
+              chromeMediaSource: "desktop",
+              chromeMediaSourceId: selectedSource.id,
+              minFrameRate: settings.fps,
+              maxFrameRate: settings.fps,
+            },
+          },
+          // System audio loopback — works on Windows; macOS needs a virtual device.
+          audio: systemAudioEnabled
+            ? { mandatory: { chromeMediaSource: "desktop" } }
+            : false,
         });
         streamRef.current = stream;
       } catch (err) {
@@ -83,11 +110,11 @@ export function RecordPage({ onNavigate }) {
       }
     }
 
-    // Countdown
+    // Countdown overlay (minimises main window, shows 3-2-1)
     setStatus("Starting in 3...");
     await api.prepareRecordingUi();
 
-    // Check track still alive
+    // Safety: confirm the video track is still alive after countdown
     const track = stream.getVideoTracks()[0];
     if (!track || track.readyState !== "live") {
       setStatus("Screen capture ended. Try again.");
@@ -99,9 +126,10 @@ export function RecordPage({ onNavigate }) {
       sessionRef.current = session;
       chunksRef.current = [];
 
+      // Choose the best supported WebM codec
       let mimeType = "video/webm; codecs=vp9";
       if (!MediaRecorder.isTypeSupported(mimeType))
-      mimeType = "video/webm;codecs=vp8";
+        mimeType = "video/webm;codecs=vp8";
       if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";
 
       const recorder = new MediaRecorder(stream, {
@@ -119,16 +147,15 @@ export function RecordPage({ onNavigate }) {
         await handleRecordingStopped();
       };
 
+      // Auto-stop if the user closes the captured window/tab
       track.addEventListener("ended", () => {
-        if (
-          mediaRecorderRef.current &&
-          mediaRecorderRef.current.state !== "inactive"
-        ) {
+        if (mediaRecorderRef.current?.state !== "inactive") {
           stopRecording();
         }
       });
 
-      recorder.start(1000);
+      recorder.start(1000); // 1-second timeslice chunks
+      videoStartTimeRef.current = Date.now(); // align event timeline with video
       mediaRecorderRef.current = recorder;
       setRecording(true);
       setElapsed(0);
@@ -142,7 +169,7 @@ export function RecordPage({ onNavigate }) {
       setStatus(`Error: ${err.message}`);
       stream.getTracks().forEach((t) => t.stop());
     }
-  }, [selectedSource]);
+  }, [selectedSource, settings, systemAudioEnabled]);
 
   async function stopRecording() {
     if (!mediaRecorderRef.current) return;
@@ -165,7 +192,7 @@ export function RecordPage({ onNavigate }) {
     }
 
     try {
-      await api.stopRecording();
+      await api.stopRecording(videoStartTimeRef.current);
       await api.finishRecordingUi();
       setStatus("Saving recording...");
     } catch (err) {
@@ -222,7 +249,7 @@ export function RecordPage({ onNavigate }) {
       streamRef.current = null;
     }
     try {
-      await api.stopRecording();
+      await api.stopRecording(videoStartTimeRef.current);
       await api.finishRecordingUi();
     } catch {}
     chunksRef.current = [];
@@ -268,23 +295,49 @@ export function RecordPage({ onNavigate }) {
       {!recording && (
         <>
           <div className="record-header">
-            <h2>Select Screen</h2>
+            <h2>Select Source</h2>
             <p className="record-subtitle">{status}</p>
+          </div>
+
+          {/* Tab selector — Displays vs Windows */}
+          <div className="source-tabs">
+            <button
+              className={`source-tab ${activeTab === "screens" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("screens");
+                setSelectedSource(null);
+              }}
+            >
+              <Monitor size={14} />
+              Displays ({displaySources.length})
+            </button>
+            <button
+              className={`source-tab ${activeTab === "windows" ? "active" : ""}`}
+              onClick={() => {
+                setActiveTab("windows");
+                setSelectedSource(null);
+              }}
+            >
+              <AppWindow size={14} />
+              Windows ({windowSources.length})
+            </button>
           </div>
 
           <div className="source-grid">
             {loading ? (
               <div className="source-loading">
                 <Loader2 size={20} className="spinner" />
-                <span>Detecting screens...</span>
+                <span>Detecting sources...</span>
               </div>
-            ) : sources.length === 0 ? (
+            ) : visibleSources.length === 0 ? (
               <div className="source-loading">
                 <Monitor size={20} />
-                <span>No screens detected</span>
+                <span>
+                  No {activeTab === "screens" ? "displays" : "windows"} detected
+                </span>
               </div>
             ) : (
-              sources.map((src) => (
+              visibleSources.map((src) => (
                 <button
                   key={src.id}
                   className={`source-card ${selectedSource?.id === src.id ? "selected" : ""}`}
@@ -293,6 +346,8 @@ export function RecordPage({ onNavigate }) {
                   <div className="source-preview">
                     {src.thumbnail ? (
                       <img src={src.thumbnail} alt={src.name} />
+                    ) : activeTab === "windows" ? (
+                      <AppWindow size={24} strokeWidth={1.5} />
                     ) : (
                       <Monitor size={24} strokeWidth={1.5} />
                     )}
@@ -303,14 +358,21 @@ export function RecordPage({ onNavigate }) {
             )}
           </div>
 
-          {previewing && selectedSource && (
-            <div className="selected-source-info">
-              <Monitor size={14} />
-              <span>{selectedSource.name}</span>
-            </div>
-          )}
-
+          {/* System audio toggle + Start button */}
           <div className="record-footer">
+            <div className="audio-section">
+              <button
+                className={`audio-toggle ${systemAudioEnabled ? "active" : ""}`}
+                onClick={() => setSystemAudioEnabled((e) => !e)}
+              >
+                {systemAudioEnabled ? (
+                  <Volume2 size={14} />
+                ) : (
+                  <VolumeX size={14} />
+                )}
+                <span>System Audio</span>
+              </button>
+            </div>
             <button
               className="btn-record-start"
               disabled={!selectedSource}

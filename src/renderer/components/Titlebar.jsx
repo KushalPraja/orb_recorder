@@ -1,5 +1,4 @@
 import React from "react";
-import { Settings, ArrowLeft } from "lucide-react";
 
 export function Titlebar({ currentPage, onNavigate }) {
   const logoSrc = `${import.meta.env.BASE_URL}Document.svg`;

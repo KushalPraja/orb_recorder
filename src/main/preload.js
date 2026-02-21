@@ -10,7 +10,8 @@ const { IPC } = require("../shared/constants");
 contextBridge.exposeInMainWorld("electronAPI", {
   // ─── Recording lifecycle ───────────────────────────────────────────
   startRecording: () => ipcRenderer.invoke(IPC.START_RECORDING),
-  stopRecording: () => ipcRenderer.invoke(IPC.STOP_RECORDING),
+  stopRecording: (videoStartTime) =>
+    ipcRenderer.invoke(IPC.STOP_RECORDING, videoStartTime),
   setCaptureSource: (sourceId) =>
     ipcRenderer.invoke(IPC.SET_CAPTURE_SOURCE, sourceId),
   prepareRecordingUi: () => ipcRenderer.invoke(IPC.PREPARE_RECORDING_UI),

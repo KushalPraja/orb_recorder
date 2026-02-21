@@ -22,6 +22,44 @@
   margin-top: 4px;
 }
 
+/* ─── Source Tabs ────────────────────────────────────────────────── */
+
+.source-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 20px 10px;
+  flex-shrink: 0;
+}
+
+.source-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.source-tab:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.source-tab.active {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
 /* ─── Source Grid ─────────────────────────────────────────────────── */
 
 .source-grid {
@@ -112,12 +150,58 @@
   color: var(--text-secondary);
 }
 
+/* ─── Audio Section ──────────────────────────────────────────────── */
+
+.audio-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 20px 4px;
+  flex-shrink: 0;
+}
+
+.audio-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.audio-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    color var(--transition-fast),
+    background var(--transition-fast);
+}
+
+.audio-toggle:hover {
+  border-color: var(--border-hover);
+  color: var(--text-secondary);
+}
+
+.audio-toggle.active {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
 /* ─── Footer ─────────────────────────────────────────────────────── */
 
 .record-footer {
-  padding: 16px 20px 20px;
+  padding: 12px 20px 20px;
   display: flex;
-  justify-content: center;
+  align-items: center;
+  gap: 10px;
   flex-shrink: 0;
   margin-top: auto;
 }
@@ -134,6 +218,9 @@
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
   transition: opacity var(--transition-fast);
 }
 

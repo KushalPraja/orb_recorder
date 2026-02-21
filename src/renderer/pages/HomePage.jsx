@@ -8,7 +8,6 @@ import {
   HardDrive,
   Pencil,
   Check,
-  Film,
   ChevronRight,
 } from "lucide-react";
 import "./HomePage.css";
