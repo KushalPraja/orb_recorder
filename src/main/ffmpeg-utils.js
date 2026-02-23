@@ -68,9 +68,40 @@ async function getBestH264Encoder() {
 
     for (const encoder of CANDIDATES) {
       if (encoders.includes(encoder)) {
-        console.log(`[FFmpeg] Hardware encoder available: ${encoder}`);
-        _cachedEncoder = encoder;
-        return encoder;
+        try {
+          await new Promise((resolve, reject) => {
+            const testProc = spawn(ffmpeg, [
+              "-hide_banner",
+              "-loglevel",
+              "error",
+              "-f",
+              "lavfi",
+              "-i",
+              "color=black:s=16x16",
+              "-t",
+              "0.1",
+              "-c:v",
+              encoder,
+              "-f",
+              "null",
+              "-",
+            ]);
+            testProc.on("close", (code) => {
+              if (code === 0) resolve();
+              else reject(new Error(`probe exit code ${code}`));
+            });
+            testProc.on("error", reject);
+          });
+          console.log(`[FFmpeg] Hardware encoder available: ${encoder}`);
+          _cachedEncoder = encoder;
+          return encoder;
+        } catch (err) {
+          console.warn(
+            `[FFmpeg] encoder ${encoder} listed but failed quick test: ${
+              err.message
+            }`,
+          );
+        }
       }
     }
   } catch (err) {
