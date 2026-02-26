@@ -4,9 +4,6 @@ import { BrowserWindow } from 'electron';
 import path from 'path';
 import { fromRoot } from '../paths';
 
-// Injected by the Forge Vite plugin at build time.
-// In dev:  MAIN_WINDOW_VITE_DEV_SERVER_URL is the Vite dev-server URL.
-// In prod: it is undefined; load the built HTML instead.
 declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
 declare const MAIN_WINDOW_VITE_NAME: string;
 
@@ -42,8 +39,6 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
-  // Dev: Forge Vite plugin injects the dev-server URL.
-  // Prod: load the renderer bundle built by the plugin.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
     mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: 'detach' });

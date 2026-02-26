@@ -15,10 +15,6 @@ export class DarwinPlatform implements PlatformService {
   async getWindowBounds(sourceId: string): Promise<WindowBounds | null> {
     const windowId = this.parseWindowId(sourceId);
     if (!windowId) return null;
-
-    // TODO: Use CGWindowListCopyWindowInfo via a native addon or
-    // AppleScript/swift helper to get window bounds from CGWindowID.
-    // For now, return null (falls back to display-based bounds in handler).
     console.warn('[Platform:Darwin] getWindowBounds not yet implemented for CGWindowID');
     return null;
   }

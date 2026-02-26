@@ -25,9 +25,12 @@ export function getFfprobePath(): string {
 let cachedEncoder: string | null = null;
 
 /**
+ * 
  * Detect the best available H.264 encoder.
  * Priority: h264_nvenc (NVIDIA) → h264_amf (AMD) → h264_videotoolbox (macOS) → libx264
+ * @returns optimal encoder option (to be passed on to a flag)
  */
+
 export async function getBestH264Encoder(): Promise<string> {
   if (cachedEncoder !== null) return cachedEncoder;
 
@@ -78,6 +81,9 @@ export async function getBestH264Encoder(): Promise<string> {
 
 /**
  * Return quality flags for a given encoder.
+ * @param encoder encoder option
+ * @param quality crf option defaults to 18 (visually lossless)
+ * @returns array of flags to be passed to ffmpeg for the specified encoder and quality
  */
 export function getEncoderQualityFlags(encoder: string, quality = 18): string[] {
   switch (encoder) {
@@ -94,6 +100,10 @@ export function getEncoderQualityFlags(encoder: string, quality = 18): string[] 
 
 // ─── Video probing ──────────────────────────────────────────────────────────────
 
+/**
+ * @param filePath file path of video
+ * @returns 
+ */
 export function probeVideo(filePath: string): Promise<VideoInfo> {
   return new Promise((resolve, reject) => {
     const ffprobe = getFfprobePath();
