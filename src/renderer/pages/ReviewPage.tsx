@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Download,
   Loader2,
@@ -14,74 +14,96 @@ import {
   ArrowLeft,
   RotateCcw,
   FolderOpen,
-} from "lucide-react";
-import "./ReviewPage.css";
+} from 'lucide-react';
+import type { NavigateFunction, ReviewData } from '../types';
+import type { ImageBlur } from '../../shared/types';
+import './ReviewPage.css';
 
 const api = window.electronAPI;
 
 /* ─── Background presets ──────────────────────────────────────────── */
 
-const GRADIENT_PRESETS = [
-  { name: "Graphite", start: "#1a1a1a", end: "#0f0f0f" },
-  { name: "Steel", start: "#2a2a2a", end: "#111111" },
-  { name: "Charcoal", start: "#232323", end: "#161616" },
-  { name: "Ocean", start: "#0f2027", end: "#203a43" },
-  { name: "Violet", start: "#16001e", end: "#30115e" },
-  { name: "Forest", start: "#0a1a0f", end: "#1a3a1f" },
-  { name: "Dusk", start: "#1a0a1a", end: "#3a102a" },
-  { name: "Ember", start: "#1a0a00", end: "#2d1200" },
+interface GradientPreset {
+  name: string;
+  start: string;
+  end: string;
+}
+
+const GRADIENT_PRESETS: GradientPreset[] = [
+  { name: 'Graphite', start: '#1a1a1a', end: '#0f0f0f' },
+  { name: 'Steel', start: '#2a2a2a', end: '#111111' },
+  { name: 'Charcoal', start: '#232323', end: '#161616' },
+  { name: 'Ocean', start: '#0f2027', end: '#203a43' },
+  { name: 'Violet', start: '#16001e', end: '#30115e' },
+  { name: 'Forest', start: '#0a1a0f', end: '#1a3a1f' },
+  { name: 'Dusk', start: '#1a0a1a', end: '#3a102a' },
+  { name: 'Ember', start: '#1a0a00', end: '#2d1200' },
 ];
 
-const COLOR_PRESETS = [
-  "#1e293b",
-  "#18181b",
-  "#2a2a2a",
-  "#3a3a3a",
-  "#d4d4d4",
-  "#f8fafc",
-  "#0f172a",
-  "#450a0a",
+const COLOR_PRESETS: string[] = [
+  '#1e293b',
+  '#18181b',
+  '#2a2a2a',
+  '#3a3a3a',
+  '#d4d4d4',
+  '#f8fafc',
+  '#0f172a',
+  '#450a0a',
 ];
 
-const WALLPAPERS = [
-  "10-14-Day-Thumb.jpg",
-  "10-15-Day-thumb.jpg",
-  "10-15-Night-thumb.jpg",
-  "11-0-Color-Day-thumbnails.jpg",
-  "11-0-Day-thumbnail.jpg",
-  "12-Light-thumbnail.jpg",
-  "13-Ventura-Light-thumb.jpg",
-  "14-Sonoma-Horizon-thumb.jpeg",
-  "14-Sonoma-Light-thumb.jpg",
-  "15-Sequoia-Dark-thumbnail.jpg",
-  "15-Sequoia-Light-thumbnail.jpg",
-  "26-Tahoe-Beach-Day-thumb.jpeg",
-  "26-Tahoe-Beach-Dusk-thumb.jpeg",
-  "26-Tahoe-Dark-6K-thumb.jpeg",
-  "26-Tahoe-Light-6K-thumb.jpeg",
+const WALLPAPERS: string[] = [
+  '10-14-Day-Thumb.jpg',
+  '10-15-Day-thumb.jpg',
+  '10-15-Night-thumb.jpg',
+  '11-0-Color-Day-thumbnails.jpg',
+  '11-0-Day-thumbnail.jpg',
+  '12-Light-thumbnail.jpg',
+  '13-Ventura-Light-thumb.jpg',
+  '14-Sonoma-Horizon-thumb.jpeg',
+  '14-Sonoma-Light-thumb.jpg',
+  '15-Sequoia-Dark-thumbnail.jpg',
+  '15-Sequoia-Light-thumbnail.jpg',
+  '26-Tahoe-Beach-Day-thumb.jpeg',
+  '26-Tahoe-Beach-Dusk-thumb.jpeg',
+  '26-Tahoe-Dark-6K-thumb.jpeg',
+  '26-Tahoe-Light-6K-thumb.jpeg',
 ];
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 
-function formatTime(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "0:00.0";
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00.0';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
   const ms = Math.floor((seconds % 1) * 10);
-  return `${m}:${String(s).padStart(2, "0")}.${ms}`;
+  return `${m}:${String(s).padStart(2, '0')}.${ms}`;
 }
 
-function formatTimecode(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return "00:00";
+function formatTimecode(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return '00:00';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
 /* ═══════════════════════════════════════════════════════════════════
    VideoTrimmer — timeline scrubber with start/end trim handles,
    thumbnail strip, and playhead.
    ═══════════════════════════════════════════════════════════════════ */
+
+type DragTarget = 'start' | 'end' | 'playhead';
+
+interface VideoTrimmerProps {
+  videoSrc: string | null;
+  duration: number;
+  trimStart: number;
+  trimEnd: number;
+  onTrimChange: (start: number, end: number) => void;
+  currentTime: number;
+  onSeek: (time: number) => void;
+  isPlaying: boolean;
+  onPlayPause: () => void;
+}
 
 function VideoTrimmer({
   videoSrc,
@@ -93,10 +115,10 @@ function VideoTrimmer({
   onSeek,
   isPlaying,
   onPlayPause,
-}) {
-  const trackRef = useRef(null);
-  const [dragging, setDragging] = useState(null);
-  const [thumbnails, setThumbnails] = useState([]);
+}: VideoTrimmerProps) {
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<DragTarget | null>(null);
+  const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
   const [thumbsLoaded, setThumbsLoaded] = useState(false);
 
   /* ── Generate thumbnail strip from video frames ───────────────── */
@@ -106,31 +128,31 @@ function VideoTrimmer({
     let cancelled = false;
     setThumbsLoaded(false);
 
-    const video = document.createElement("video");
+    const video = document.createElement('video');
     video.src = videoSrc;
     video.muted = true;
-    video.preload = "auto";
+    video.preload = 'auto';
 
-    const canvas = document.createElement("canvas");
+    const canvas = document.createElement('canvas');
     canvas.width = 160;
     canvas.height = 90;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext('2d')!;
 
     const THUMB_COUNT = 20;
-    const thumbs = [];
+    const thumbs: (string | null)[] = [];
 
-    video.addEventListener("loadeddata", async () => {
+    video.addEventListener('loadeddata', async () => {
       for (let i = 0; i < THUMB_COUNT && !cancelled; i++) {
         const time = ((i + 0.5) / THUMB_COUNT) * duration;
         video.currentTime = Math.min(time, duration - 0.05);
-        await new Promise((resolve) => {
-          video.onseeked = resolve;
+        await new Promise<void>((resolve) => {
+          video.onseeked = () => resolve();
           setTimeout(resolve, 600);
         });
         if (cancelled) break;
         try {
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          thumbs.push(canvas.toDataURL("image/jpeg", 0.5));
+          thumbs.push(canvas.toDataURL('image/jpeg', 0.5));
         } catch {
           thumbs.push(null);
         }
@@ -139,22 +161,22 @@ function VideoTrimmer({
         setThumbnails([...thumbs]);
         setThumbsLoaded(true);
       }
-      video.src = "";
+      video.src = '';
     });
 
-    video.addEventListener("error", () => {
+    video.addEventListener('error', () => {
       if (!cancelled) setThumbsLoaded(true);
     });
 
     return () => {
       cancelled = true;
-      video.src = "";
+      video.src = '';
     };
   }, [videoSrc, duration]);
 
   /* ── Position helpers ─────────────────────────────────────────── */
   const posToTime = useCallback(
-    (clientX) => {
+    (clientX: number): number => {
       const rect = trackRef.current?.getBoundingClientRect();
       if (!rect || !duration) return 0;
       const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
@@ -164,15 +186,18 @@ function VideoTrimmer({
   );
 
   /* ── Drag interaction ─────────────────────────────────────────── */
-  const handlePointerDown = useCallback((e, type) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragging(type);
-    document.body.style.cursor = type === "playhead" ? "grabbing" : "ew-resize";
-  }, []);
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent, type: DragTarget) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragging(type);
+      document.body.style.cursor = type === 'playhead' ? 'grabbing' : 'ew-resize';
+    },
+    [],
+  );
 
   const handleTrackClick = useCallback(
-    (e) => {
+    (e: React.MouseEvent) => {
       if (dragging) return;
       const time = posToTime(e.clientX);
       const clamped = Math.max(trimStart, Math.min(time, trimEnd));
@@ -186,30 +211,30 @@ function VideoTrimmer({
 
     const MIN_CLIP = 0.5;
 
-    const handleMove = (e) => {
+    const handleMove = (e: PointerEvent) => {
       const time = posToTime(e.clientX);
-      if (dragging === "start") {
+      if (dragging === 'start') {
         onTrimChange(Math.max(0, Math.min(time, trimEnd - MIN_CLIP)), trimEnd);
-      } else if (dragging === "end") {
+      } else if (dragging === 'end') {
         onTrimChange(
           trimStart,
           Math.min(duration, Math.max(time, trimStart + MIN_CLIP)),
         );
-      } else if (dragging === "playhead") {
+      } else if (dragging === 'playhead') {
         onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
       }
     };
 
     const handleUp = () => {
       setDragging(null);
-      document.body.style.cursor = "";
+      document.body.style.cursor = '';
     };
 
-    document.addEventListener("pointermove", handleMove);
-    document.addEventListener("pointerup", handleUp);
+    document.addEventListener('pointermove', handleMove);
+    document.addEventListener('pointerup', handleUp);
     return () => {
-      document.removeEventListener("pointermove", handleMove);
-      document.removeEventListener("pointerup", handleUp);
+      document.removeEventListener('pointermove', handleMove);
+      document.removeEventListener('pointerup', handleUp);
     };
   }, [dragging, posToTime, trimStart, trimEnd, duration, onTrimChange, onSeek]);
 
@@ -243,7 +268,7 @@ function VideoTrimmer({
         </div>
         <div className="trimmer-badge trimmer-badge--end">
           <span>{formatTime(trimEnd)}</span>
-          <Scissors size={10} style={{ transform: "scaleX(-1)" }} />
+          <Scissors size={10} style={{ transform: 'scaleX(-1)' }} />
         </div>
       </div>
 
@@ -290,9 +315,9 @@ function VideoTrimmer({
 
         {/* Start handle */}
         <div
-          className={`trimmer-handle trimmer-handle--start ${dragging === "start" ? "active" : ""}`}
+          className={`trimmer-handle trimmer-handle--start ${dragging === 'start' ? 'active' : ''}`}
           style={{ left: `${startPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, "start")}
+          onPointerDown={(e) => handlePointerDown(e, 'start')}
         >
           <div className="trimmer-handle-bar">
             <span />
@@ -302,9 +327,9 @@ function VideoTrimmer({
 
         {/* End handle */}
         <div
-          className={`trimmer-handle trimmer-handle--end ${dragging === "end" ? "active" : ""}`}
+          className={`trimmer-handle trimmer-handle--end ${dragging === 'end' ? 'active' : ''}`}
           style={{ left: `${endPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, "end")}
+          onPointerDown={(e) => handlePointerDown(e, 'end')}
         >
           <div className="trimmer-handle-bar">
             <span />
@@ -314,9 +339,9 @@ function VideoTrimmer({
 
         {/* Playhead */}
         <div
-          className={`trimmer-playhead ${dragging === "playhead" ? "active" : ""}`}
+          className={`trimmer-playhead ${dragging === 'playhead' ? 'active' : ''}`}
           style={{ left: `${playheadPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, "playhead")}
+          onPointerDown={(e) => handlePointerDown(e, 'playhead')}
         >
           <div className="trimmer-playhead-head" />
           <div className="trimmer-playhead-line" />
@@ -336,7 +361,7 @@ function VideoTrimmer({
           <button
             className="trimmer-play-btn"
             onClick={onPlayPause}
-            title={isPlaying ? "Pause" : "Play"}
+            title={isPlaying ? 'Pause' : 'Play'}
           >
             {isPlaying ? <Pause size={16} /> : <Play size={16} />}
           </button>
@@ -364,10 +389,17 @@ function VideoTrimmer({
    ReviewPage — export screen with video trimmer + settings sidebar.
    ═══════════════════════════════════════════════════════════════════ */
 
-export function ReviewPage({ data, onNavigate }) {
+type BgType = 'color' | 'gradient' | 'image';
+
+interface ReviewPageProps {
+  data: ReviewData | null;
+  onNavigate: NavigateFunction;
+}
+
+export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   /* state — remux */
   const [remuxing, setRemuxing] = useState(false);
-  const [cleanPath, setCleanPath] = useState(null);
+  const [cleanPath, setCleanPath] = useState<string | null>(null);
 
   /* state — video */
   const [videoDuration, setVideoDuration] = useState(0);
@@ -381,24 +413,23 @@ export function ReviewPage({ data, onNavigate }) {
   /* state — processing */
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [phase, setPhase] = useState("");
+  const [phase, setPhase] = useState('');
   const [done, setDone] = useState(false);
-  const [outputPath, setOutputPath] = useState(null);
-  const [error, setError] = useState(null);
+  const [outputPath, setOutputPath] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   /* state — export options */
   const [autoZoom, setAutoZoom] = useState(false);
-  // bgEnabled toggles background on/off; bgType: 'color' | 'gradient' | 'image'
   const [bgEnabled, setBgEnabled] = useState(true);
-  const [bgType, setBgType] = useState("gradient");
-  const [bgColor, setBgColor] = useState("#1e293b");
+  const [bgType, setBgType] = useState<BgType>('gradient');
+  const [bgColor, setBgColor] = useState('#1e293b');
   const [gradientIdx, setGradientIdx] = useState(0);
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
-  const [imageBlur, setImageBlur] = useState("none"); // 'none' | 'moderate' | 'strong'
+  const [imageBlur, setImageBlur] = useState<ImageBlur>('none');
   const [cornerRadius, setCornerRadius] = useState(12);
   const [padding, setPadding] = useState(48);
 
-  const videoRef = useRef(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   /* Whether we came from the home page (existing project) vs fresh recording */
   const isExistingProject = !!data?.fromHome;
@@ -414,7 +445,7 @@ export function ReviewPage({ data, onNavigate }) {
         setCleanPath(p);
         setRemuxing(false);
       })
-      .catch((err) => {
+      .catch((err: Error) => {
         setError(`Failed to prepare video: ${err.message}`);
         setRemuxing(false);
       });
@@ -463,8 +494,8 @@ export function ReviewPage({ data, onNavigate }) {
     const time = videoRef.current?.currentTime || 0;
     setCurrentTime(time);
     if (time >= trimEnd - 0.05) {
-      videoRef.current.pause();
-      videoRef.current.currentTime = trimStart;
+      videoRef.current!.pause();
+      videoRef.current!.currentTime = trimStart;
       setIsPlaying(false);
     }
   }, [trimStart, trimEnd]);
@@ -489,14 +520,14 @@ export function ReviewPage({ data, onNavigate }) {
     }
   }, [isPlaying, trimStart, trimEnd]);
 
-  const handleSeek = useCallback((time) => {
+  const handleSeek = useCallback((time: number) => {
     if (videoRef.current) {
       videoRef.current.currentTime = time;
       setCurrentTime(time);
     }
   }, []);
 
-  const handleTrimChange = useCallback((start, end) => {
+  const handleTrimChange = useCallback((start: number, end: number) => {
     setTrimStart(start);
     setTrimEnd(end);
   }, []);
@@ -507,10 +538,9 @@ export function ReviewPage({ data, onNavigate }) {
   const handleExport = async () => {
     if (!data?.sessionDir) return;
 
-    // Ask user where to save
-    const defaultName = data.name || "recording";
+    const defaultName = data.name || 'recording';
     const exportPath = await api.pickExportPath(defaultName);
-    if (!exportPath) return; // user cancelled
+    if (!exportPath) return;
 
     setProcessing(true);
     setError(null);
@@ -529,26 +559,26 @@ export function ReviewPage({ data, onNavigate }) {
       cornerRadius: bgEnabled ? cornerRadius : 0,
       padding: bgEnabled ? padding : 0,
       backgroundType: !bgEnabled
-        ? "none"
-        : bgType === "color"
-          ? "solid"
-          : bgType === "gradient"
-            ? "gradient"
-            : "image",
-      backgroundColor: bgEnabled && bgType === "color" ? bgColor : undefined,
+        ? undefined
+        : bgType === 'color'
+          ? ('solid' as const)
+          : bgType === 'gradient'
+            ? ('gradient' as const)
+            : ('image' as const),
+      backgroundColor: bgEnabled && bgType === 'color' ? bgColor : undefined,
       gradientStart:
-        bgEnabled && bgType === "gradient" ? gradient.start : undefined,
+        bgEnabled && bgType === 'gradient' ? gradient.start : undefined,
       gradientEnd:
-        bgEnabled && bgType === "gradient" ? gradient.end : undefined,
+        bgEnabled && bgType === 'gradient' ? gradient.end : undefined,
       wallpaperFile:
-        bgEnabled && bgType === "image" ? WALLPAPERS[wallpaperIdx] : undefined,
-      imageBlur: bgEnabled && bgType === "image" ? imageBlur : "none",
+        bgEnabled && bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
+      imageBlur: bgEnabled && bgType === 'image' ? imageBlur : ('none' as const),
       ...(isTrimmed && { trimStart, trimEnd }),
     };
 
     try {
       await api.processVideo(exportOpts);
-    } catch (err) {
+    } catch (err: any) {
       setError(err.message);
       setProcessing(false);
     }
@@ -556,20 +586,20 @@ export function ReviewPage({ data, onNavigate }) {
 
   const handleDiscard = async () => {
     if (!data?.sessionDir) {
-      onNavigate("home");
+      onNavigate('home');
       return;
     }
 
     try {
       setProcessing(true);
       await api.deleteRecording(data.sessionDir);
-    } catch (err) {
-      setError(err?.message || "Failed to delete project");
+    } catch (err: any) {
+      setError(err?.message || 'Failed to delete project');
       setProcessing(false);
       return;
     }
     setProcessing(false);
-    onNavigate("home");
+    onNavigate('home');
   };
 
   const handleOpen = () => {
@@ -580,23 +610,23 @@ export function ReviewPage({ data, onNavigate }) {
     setDone(false);
     setOutputPath(null);
     setProgress(0);
-    setPhase("");
+    setPhase('');
     setError(null);
   };
 
   /* ─── Preview background CSS ─────────────────────────────────────── */
   const previewCanvasBg = !bgEnabled
-    ? "var(--bg-secondary)"
-    : bgType === "color"
+    ? 'var(--bg-secondary)'
+    : bgType === 'color'
       ? bgColor
-      : bgType === "gradient"
+      : bgType === 'gradient'
         ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`
-        : bgType === "image"
-          ? "transparent"
-          : "var(--bg-secondary)";
+        : bgType === 'image'
+          ? 'transparent'
+          : 'var(--bg-secondary)';
 
   const blurPx =
-    imageBlur === "moderate" ? 10 : imageBlur === "strong" ? 24 : 0;
+    imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 24 : 0;
 
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
 
@@ -608,7 +638,7 @@ export function ReviewPage({ data, onNavigate }) {
           <p>No recording to review</p>
           <button
             className="rv-btn rv-btn--secondary"
-            onClick={() => onNavigate("home")}
+            onClick={() => onNavigate('home')}
           >
             Go Home
           </button>
@@ -640,12 +670,12 @@ export function ReviewPage({ data, onNavigate }) {
         <div className="rv-header-left">
           <button
             className="rv-back-btn"
-            onClick={() => onNavigate("home")}
+            onClick={() => onNavigate('home')}
             title="Back to projects"
           >
             <ArrowLeft size={14} />
           </button>
-          <h2>{data.name || "Export"}</h2>
+          <h2>{data.name || 'Export'}</h2>
           <div className="rv-header-badges">
             {data.size && (
               <span className="rv-badge rv-badge--muted">
@@ -668,12 +698,12 @@ export function ReviewPage({ data, onNavigate }) {
           {/* Video preview */}
           <div className="rv-preview-wrap">
             {/* Blurred image background layer */}
-            {bgEnabled && bgType === "image" && (
+            {bgEnabled && bgType === 'image' && (
               <div
                 className="rv-preview-bg-image"
                 style={{
                   backgroundImage: `url(./Wallpapers/${WALLPAPERS[wallpaperIdx]})`,
-                  filter: blurPx > 0 ? `blur(${blurPx}px)` : "none",
+                  filter: blurPx > 0 ? `blur(${blurPx}px)` : 'none',
                 }}
               />
             )}
@@ -788,29 +818,29 @@ export function ReviewPage({ data, onNavigate }) {
               </div>
 
               {/* Collapsible sub-panel — only shown when enabled */}
-              <div className={`rv-bg-sub ${bgEnabled ? "open" : ""}`}>
+              <div className={`rv-bg-sub ${bgEnabled ? 'open' : ''}`}>
                 {/* Type selector — 3 options only */}
                 <div className="rv-field">
                   <span className="rv-field-label">Style</span>
                   <div className="rv-bg-type-selector">
-                    {["color", "gradient", "image"].map((t) => (
+                    {(['color', 'gradient', 'image'] as const).map((t) => (
                       <button
                         key={t}
-                        className={`rv-bg-type-btn ${bgType === t ? "active" : ""}`}
+                        className={`rv-bg-type-btn ${bgType === t ? 'active' : ''}`}
                         onClick={() => setBgType(t)}
                       >
-                        {t === "color"
-                          ? "Color"
-                          : t === "gradient"
-                            ? "Gradient"
-                            : "Image"}
+                        {t === 'color'
+                          ? 'Color'
+                          : t === 'gradient'
+                            ? 'Gradient'
+                            : 'Image'}
                       </button>
                     ))}
                   </div>
                 </div>
 
                 {/* Color picker */}
-                {bgType === "color" && (
+                {bgType === 'color' && (
                   <div className="rv-field">
                     <div className="rv-field-header">
                       <span className="rv-field-label">Color</span>
@@ -825,7 +855,7 @@ export function ReviewPage({ data, onNavigate }) {
                       {COLOR_PRESETS.map((c, i) => (
                         <button
                           key={i}
-                          className={`rv-swatch ${bgColor === c ? "active" : ""}`}
+                          className={`rv-swatch ${bgColor === c ? 'active' : ''}`}
                           style={{ background: c }}
                           title={c}
                           onClick={() => setBgColor(c)}
@@ -836,14 +866,14 @@ export function ReviewPage({ data, onNavigate }) {
                 )}
 
                 {/* Gradient presets */}
-                {bgType === "gradient" && (
+                {bgType === 'gradient' && (
                   <div className="rv-field">
                     <span className="rv-field-label">Preset</span>
                     <div className="rv-swatches">
                       {GRADIENT_PRESETS.map((g, i) => (
                         <button
                           key={i}
-                          className={`rv-swatch ${gradientIdx === i ? "active" : ""}`}
+                          className={`rv-swatch ${gradientIdx === i ? 'active' : ''}`}
                           style={{
                             background: `linear-gradient(135deg, ${g.start}, ${g.end})`,
                           }}
@@ -856,7 +886,7 @@ export function ReviewPage({ data, onNavigate }) {
                 )}
 
                 {/* Image wallpaper picker */}
-                {bgType === "image" && (
+                {bgType === 'image' && (
                   <>
                     <div className="rv-field">
                       <span className="rv-field-label">Wallpaper</span>
@@ -864,13 +894,13 @@ export function ReviewPage({ data, onNavigate }) {
                         {WALLPAPERS.map((w, i) => (
                           <button
                             key={i}
-                            className={`rv-wallpaper-thumb ${wallpaperIdx === i ? "active" : ""}`}
+                            className={`rv-wallpaper-thumb ${wallpaperIdx === i ? 'active' : ''}`}
                             style={{
                               backgroundImage: `url(./Wallpapers/${w})`,
                             }}
                             title={w
-                              .replace(/-thumb\.(jpg|jpeg)$/i, "")
-                              .replace(/-thumbnail\.(jpg|jpeg)$/i, "")}
+                              .replace(/-thumb\.(jpg|jpeg)$/i, '')
+                              .replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
                             onClick={() => setWallpaperIdx(i)}
                           />
                         ))}
@@ -879,10 +909,10 @@ export function ReviewPage({ data, onNavigate }) {
                     <div className="rv-field">
                       <span className="rv-field-label">Blur</span>
                       <div className="rv-blur-options">
-                        {["none", "moderate", "strong"].map((b) => (
+                        {(['none', 'moderate', 'strong'] as const).map((b) => (
                           <button
                             key={b}
-                            className={`rv-blur-btn ${imageBlur === b ? "active" : ""}`}
+                            className={`rv-blur-btn ${imageBlur === b ? 'active' : ''}`}
                             onClick={() => setImageBlur(b)}
                           >
                             {b.charAt(0).toUpperCase() + b.slice(1)}
@@ -945,7 +975,7 @@ export function ReviewPage({ data, onNavigate }) {
                   </button>
                   <button
                     className="rv-btn rv-btn--secondary"
-                    onClick={() => onNavigate("home")}
+                    onClick={() => onNavigate('home')}
                   >
                     Done
                   </button>
@@ -974,7 +1004,7 @@ export function ReviewPage({ data, onNavigate }) {
                     onClick={handleDiscard}
                     disabled={processing}
                   >
-                    <span>{"Discard"}</span>
+                    <span>Discard</span>
                   </button>
                 </>
               )}
@@ -992,7 +1022,7 @@ export function ReviewPage({ data, onNavigate }) {
             </div>
           </div>
           <span className="rv-progress-label">
-            {phase || "Processing…"} {progress}%
+            {phase || 'Processing…'} {progress}%
           </span>
         </div>
       )}
@@ -1002,8 +1032,6 @@ export function ReviewPage({ data, onNavigate }) {
           <p>{error}</p>
         </div>
       )}
-
-      {/* actions moved into sidebar footer */}
     </div>
   );
 }

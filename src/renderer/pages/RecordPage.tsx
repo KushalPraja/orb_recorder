@@ -1,22 +1,26 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Monitor, AppWindow, Loader2, Volume2, VolumeX } from "lucide-react";
-
-import { useSettings } from "../contexts/SettingsContext";
-import "./RecordPage.css";
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Monitor, AppWindow, Loader2, Volume2, VolumeX } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
+import type { CaptureSource } from '../../shared/types';
+import type { NavigateFunction } from '../types';
+import './RecordPage.css';
 
 const api = window.electronAPI;
 
-export function RecordPage({ onNavigate }) {
+interface RecordPageProps {
+  onNavigate: NavigateFunction;
+}
+
+type SourceTab = 'screens' | 'windows';
+
+export function RecordPage({ onNavigate }: RecordPageProps) {
   const { settings } = useSettings();
 
   // ── Source picker state ───────────────────────────────────────────────────
-  const [sources, setSources] = useState([]);
-  const [selectedSource, setSelectedSource] = useState(null);
+  const [sources, setSources] = useState<CaptureSource[]>([]);
+  const [selectedSource, setSelectedSource] = useState<CaptureSource | null>(null);
   const [loading, setLoading] = useState(true);
-  /** Active tab: show display sources or window sources */
-  const [activeTab, setActiveTab] = useState(
-    /** @type {"screens"|"windows"} */ ("screens"),
-  );
+  const [activeTab, setActiveTab] = useState<SourceTab>('screens');
 
   // ── Audio state ───────────────────────────────────────────────────────────
   const [systemAudioEnabled, setSystemAudioEnabled] = useState(true);
@@ -24,15 +28,15 @@ export function RecordPage({ onNavigate }) {
   // ── Recording state ───────────────────────────────────────────────────────
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-  const [status, setStatus] = useState("Select a screen to record");
+  const [status, setStatus] = useState('Select a screen to record');
 
-  const mediaRecorderRef = useRef(null);
-  const streamRef = useRef(null);
-  const chunksRef = useRef([]);
-  const timerRef = useRef(null);
-  const sessionRef = useRef(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const sessionRef = useRef<{ sessionDir: string; startTime: number } | null>(null);
   const discardingRef = useRef(false);
-  const videoStartTimeRef = useRef(null);
+  const videoStartTimeRef = useRef<number | null>(null);
 
   // ── Load screen/window sources ────────────────────────────────────────────
   useEffect(() => {
@@ -45,10 +49,10 @@ export function RecordPage({ onNavigate }) {
           setLoading(false);
         }
       } catch (err) {
-        console.error("Failed to get sources:", err);
+        console.error('Failed to get sources:', err);
         if (!cancelled) {
           setLoading(false);
-          setStatus("Failed to detect screens");
+          setStatus('Failed to detect screens');
         }
       }
     })();
@@ -66,16 +70,16 @@ export function RecordPage({ onNavigate }) {
   }, []);
 
   // ── Source selection ──────────────────────────────────────────────────────
-  const selectSource = useCallback((source) => {
+  const selectSource = useCallback((source: CaptureSource) => {
     setSelectedSource(source);
-    setStatus("Source selected — click Record to start");
+    setStatus('Source selected — click Record to start');
   }, []);
 
   // Derived: split sources into displays vs windows for the two tabs
-  const displaySources = sources.filter((s) => s.type === "screen");
-  const windowSources = sources.filter((s) => s.type === "window");
+  const displaySources = sources.filter((s) => s.type === 'screen');
+  const windowSources = sources.filter((s) => s.type === 'window');
   const visibleSources =
-    activeTab === "screens" ? displaySources : windowSources;
+    activeTab === 'screens' ? displaySources : windowSources;
 
   const startRecording = useCallback(async () => {
     if (!selectedSource) return;
@@ -84,40 +88,38 @@ export function RecordPage({ onNavigate }) {
     await api.setCaptureSource(selectedSource.id);
 
     // ── Acquire display/window capture stream ─────────────────────────────
-    if (!stream || stream.getTracks().every((t) => t.readyState !== "live")) {
+    if (!stream || stream.getTracks().every((t) => t.readyState !== 'live')) {
       try {
-        // In Electron, getUserMedia with chromeMediaSource/chromeMediaSourceId
-        // is the correct way to capture a specific desktopCapturer source.
-        // getDisplayMedia would show the system picker and ignore our selection.
-        stream = await navigator.mediaDevices.getUserMedia({
+        // Chromium desktop capture constraints (not in standard WebRTC types)
+        const constraints: any = {
           video: {
             mandatory: {
-              chromeMediaSource: "desktop",
+              chromeMediaSource: 'desktop',
               chromeMediaSourceId: selectedSource.id,
-              minFrameRate: settings.fps,
-              maxFrameRate: settings.fps,
+              minFrameRate: settings?.fps ?? 30,
+              maxFrameRate: settings?.fps ?? 30,
             },
           },
-          // System audio loopback — works on Windows; macOS needs a virtual device.
           audio: systemAudioEnabled
-            ? { mandatory: { chromeMediaSource: "desktop" } }
+            ? { mandatory: { chromeMediaSource: 'desktop' } }
             : false,
-        });
+        };
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
         streamRef.current = stream;
-      } catch (err) {
-        setStatus("Screen access denied");
+      } catch {
+        setStatus('Screen access denied');
         return;
       }
     }
 
     // Countdown overlay (minimises main window, shows 3-2-1)
-    setStatus("Starting in 3...");
+    setStatus('Starting in 3...');
     await api.prepareRecordingUi();
 
     // Safety: confirm the video track is still alive after countdown
     const track = stream.getVideoTracks()[0];
-    if (!track || track.readyState !== "live") {
-      setStatus("Screen capture ended. Try again.");
+    if (!track || track.readyState !== 'live') {
+      setStatus('Screen capture ended. Try again.');
       return;
     }
 
@@ -127,45 +129,45 @@ export function RecordPage({ onNavigate }) {
       chunksRef.current = [];
 
       // Choose the best supported WebM codec
-      let mimeType = "video/webm; codecs=vp9";
+      let mimeType = 'video/webm; codecs=vp9';
       if (!MediaRecorder.isTypeSupported(mimeType))
-        mimeType = "video/webm;codecs=vp8";
-      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = "video/webm";
+        mimeType = 'video/webm;codecs=vp8';
+      if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
 
       const recorder = new MediaRecorder(stream, {
         mimeType,
         videoBitsPerSecond: 6_000_000,
       });
 
-      recorder.ondataavailable = (e) => {
+      recorder.ondataavailable = (e: BlobEvent) => {
         if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
       };
 
       recorder.onstop = async () => {
-        stream.getTracks().forEach((t) => t.stop());
+        stream!.getTracks().forEach((t) => t.stop());
         streamRef.current = null;
         await handleRecordingStopped();
       };
 
       // Auto-stop if the user closes the captured window/tab
-      track.addEventListener("ended", () => {
-        if (mediaRecorderRef.current?.state !== "inactive") {
+      track.addEventListener('ended', () => {
+        if (mediaRecorderRef.current?.state !== 'inactive') {
           stopRecording();
         }
       });
 
       recorder.start(1000); // 1-second timeslice chunks
-      videoStartTimeRef.current = Date.now(); // align event timeline with video
+      videoStartTimeRef.current = Date.now();
       mediaRecorderRef.current = recorder;
       setRecording(true);
       setElapsed(0);
-      setStatus("Recording...");
+      setStatus('Recording...');
 
       const start = Date.now();
       timerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - start) / 1000));
       }, 1000);
-    } catch (err) {
+    } catch (err: any) {
       setStatus(`Error: ${err.message}`);
       stream.getTracks().forEach((t) => t.stop());
     }
@@ -181,22 +183,22 @@ export function RecordPage({ onNavigate }) {
     }
 
     const recorder = mediaRecorderRef.current;
-    if (recorder.state !== "inactive") {
-      if (recorder.state === "recording") {
+    if (recorder.state !== 'inactive') {
+      if (recorder.state === 'recording') {
         try {
           recorder.requestData();
-        } catch {}
+        } catch { /* ignore */ }
         await new Promise((r) => setTimeout(r, 200));
       }
       recorder.stop();
     }
 
     try {
-      await api.stopRecording(videoStartTimeRef.current);
+      await api.stopRecording(videoStartTimeRef.current ?? undefined);
       await api.finishRecordingUi();
-      setStatus("Saving recording...");
+      setStatus('Saving recording...');
     } catch (err) {
-      console.error("Failed to stop tracking:", err);
+      console.error('Failed to stop tracking:', err);
       await api.finishRecordingUi();
     }
   }
@@ -206,17 +208,17 @@ export function RecordPage({ onNavigate }) {
       stopRecording();
     });
     const unsubPause = api.onOverlayPauseRequest(() => {
-      if (mediaRecorderRef.current?.state === "recording") {
+      if (mediaRecorderRef.current?.state === 'recording') {
         try {
           mediaRecorderRef.current.pause();
-        } catch {}
+        } catch { /* ignore */ }
       }
     });
     const unsubResume = api.onOverlayResumeRequest(() => {
-      if (mediaRecorderRef.current?.state === "paused") {
+      if (mediaRecorderRef.current?.state === 'paused') {
         try {
           mediaRecorderRef.current.resume();
-        } catch {}
+        } catch { /* ignore */ }
       }
     });
     const unsubDiscard = api.onOverlayDiscardRequest(() => {
@@ -239,54 +241,54 @@ export function RecordPage({ onNavigate }) {
       timerRef.current = null;
     }
     const recorder = mediaRecorderRef.current;
-    if (recorder.state !== "inactive") {
+    if (recorder.state !== 'inactive') {
       try {
         recorder.stop();
-      } catch {}
+      } catch { /* ignore */ }
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
     try {
-      await api.stopRecording(videoStartTimeRef.current);
+      await api.stopRecording(videoStartTimeRef.current ?? undefined);
       await api.finishRecordingUi();
-    } catch {}
+    } catch { /* ignore */ }
     chunksRef.current = [];
     setElapsed(0);
-    setStatus("Recording discarded — select a screen to record.");
+    setStatus('Recording discarded — select a screen to record.');
   }
 
   const handleRecordingStopped = useCallback(async () => {
-    // Discard path — don’t save or navigate
+    // Discard path — don't save or navigate
     if (discardingRef.current) {
       discardingRef.current = false;
       return;
     }
     try {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const blob = new Blob(chunksRef.current, { type: 'video/webm' });
       if (blob.size === 0) {
-        setStatus("Recording is empty. Try again.");
+        setStatus('Recording is empty. Try again.');
         return;
       }
 
       const arrayBuffer = await blob.arrayBuffer();
       const savedPath = await api.saveRecording(arrayBuffer);
 
-      onNavigate("review", {
-        sessionDir: sessionRef.current?.sessionDir,
+      onNavigate('review', {
+        sessionDir: sessionRef.current?.sessionDir ?? '',
         filePath: savedPath,
         size: blob.size,
         duration: elapsed,
       });
-    } catch (err) {
+    } catch (err: any) {
       setStatus(`Save error: ${err.message}`);
     }
   }, [onNavigate, elapsed]);
 
-  const formatTime = (secs) => {
-    const m = String(Math.floor(secs / 60)).padStart(2, "0");
-    const s = String(secs % 60).padStart(2, "0");
+  const formatTime = (secs: number): string => {
+    const m = String(Math.floor(secs / 60)).padStart(2, '0');
+    const s = String(secs % 60).padStart(2, '0');
     return `${m}:${s}`;
   };
 
@@ -302,9 +304,9 @@ export function RecordPage({ onNavigate }) {
           {/* Tab selector — Displays vs Windows */}
           <div className="source-tabs">
             <button
-              className={`source-tab ${activeTab === "screens" ? "active" : ""}`}
+              className={`source-tab ${activeTab === 'screens' ? 'active' : ''}`}
               onClick={() => {
-                setActiveTab("screens");
+                setActiveTab('screens');
                 setSelectedSource(null);
               }}
             >
@@ -312,9 +314,9 @@ export function RecordPage({ onNavigate }) {
               Displays ({displaySources.length})
             </button>
             <button
-              className={`source-tab ${activeTab === "windows" ? "active" : ""}`}
+              className={`source-tab ${activeTab === 'windows' ? 'active' : ''}`}
               onClick={() => {
-                setActiveTab("windows");
+                setActiveTab('windows');
                 setSelectedSource(null);
               }}
             >
@@ -333,20 +335,20 @@ export function RecordPage({ onNavigate }) {
               <div className="source-loading">
                 <Monitor size={20} />
                 <span>
-                  No {activeTab === "screens" ? "displays" : "windows"} detected
+                  No {activeTab === 'screens' ? 'displays' : 'windows'} detected
                 </span>
               </div>
             ) : (
               visibleSources.map((src) => (
                 <button
                   key={src.id}
-                  className={`source-card ${selectedSource?.id === src.id ? "selected" : ""}`}
+                  className={`source-card ${selectedSource?.id === src.id ? 'selected' : ''}`}
                   onClick={() => selectSource(src)}
                 >
                   <div className="source-preview">
                     {src.thumbnail ? (
                       <img src={src.thumbnail} alt={src.name} />
-                    ) : activeTab === "windows" ? (
+                    ) : activeTab === 'windows' ? (
                       <AppWindow size={24} strokeWidth={1.5} />
                     ) : (
                       <Monitor size={24} strokeWidth={1.5} />
@@ -362,7 +364,7 @@ export function RecordPage({ onNavigate }) {
           <div className="record-footer">
             <div className="audio-section">
               <button
-                className={`audio-toggle ${systemAudioEnabled ? "active" : ""}`}
+                className={`audio-toggle ${systemAudioEnabled ? 'active' : ''}`}
                 onClick={() => setSystemAudioEnabled((e) => !e)}
               >
                 {systemAudioEnabled ? (

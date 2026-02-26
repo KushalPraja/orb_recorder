@@ -1,11 +1,18 @@
-import React, { useState } from "react";
-import { FolderOpen } from "lucide-react";
-import { useSettings } from "../contexts/SettingsContext";
-import "./SettingsPage.css";
+import React, { useState } from 'react';
+import { FolderOpen } from 'lucide-react';
+import { useSettings } from '../contexts/SettingsContext';
+import type { NavigateFunction } from '../types';
+import type { OverlayPosition } from '../../shared/types';
+import './SettingsPage.css';
 
-export function SettingsPage({ onNavigate }) {
-  const { settings, isLoading, updateSetting, pickOutputDir, openSettingsFile } = useSettings();
-  const [savedKey, setSavedKey] = useState(null);
+interface SettingsPageProps {
+  onNavigate: NavigateFunction;
+}
+
+export function SettingsPage({ onNavigate }: SettingsPageProps) {
+  const { settings, isLoading, updateSetting, pickOutputDir, openSettingsFile } =
+    useSettings();
+  const [savedKey, setSavedKey] = useState<string | null>(null);
 
   if (isLoading || !settings) {
     return (
@@ -18,7 +25,7 @@ export function SettingsPage({ onNavigate }) {
     );
   }
 
-  const handleUpdate = (key, value) => {
+  const handleUpdate = (key: keyof typeof settings, value: any) => {
     updateSetting(key, value);
     setSavedKey(key);
     setTimeout(() => setSavedKey(null), 1500);
@@ -26,14 +33,14 @@ export function SettingsPage({ onNavigate }) {
 
   const handlePickDir = async () => {
     await pickOutputDir();
-    setSavedKey("outputDir");
+    setSavedKey('outputDir');
     setTimeout(() => setSavedKey(null), 1500);
   };
 
-  const shortenPath = (p) => {
-    if (!p) return "—";
+  const shortenPath = (p: string | undefined): string => {
+    if (!p) return '\u2014';
     const parts = p.split(/[/\\]/);
-    return parts.length > 3 ? `.../${parts.slice(-2).join("/")}` : p;
+    return parts.length > 3 ? `.../${parts.slice(-2).join('/')}` : p;
   };
 
   return (
@@ -56,7 +63,7 @@ export function SettingsPage({ onNavigate }) {
               className="setting-select"
               value={settings.fps}
               onChange={(e) =>
-                handleUpdate("fps", parseInt(e.target.value, 10))
+                handleUpdate('fps', parseInt(e.target.value, 10))
               }
             >
               <option value={15}>15 fps</option>
@@ -85,8 +92,10 @@ export function SettingsPage({ onNavigate }) {
             </div>
             <select
               className="setting-select"
-              value={settings.overlayPosition ?? "bottom-center"}
-              onChange={(e) => handleUpdate("overlayPosition", e.target.value)}
+              value={settings.overlayPosition ?? 'bottom-center'}
+              onChange={(e) =>
+                handleUpdate('overlayPosition', e.target.value as OverlayPosition)
+              }
             >
               <option value="bottom-center">Bottom Center</option>
               <option value="bottom-left">Bottom Left</option>
@@ -117,7 +126,7 @@ export function SettingsPage({ onNavigate }) {
               step="0.1"
               value={settings.zoomFactor}
               onChange={(e) =>
-                handleUpdate("zoomFactor", parseFloat(e.target.value))
+                handleUpdate('zoomFactor', parseFloat(e.target.value))
               }
             />
           </div>
@@ -137,7 +146,7 @@ export function SettingsPage({ onNavigate }) {
               step="0.1"
               value={settings.zoomDuration}
               onChange={(e) =>
-                handleUpdate("zoomDuration", parseFloat(e.target.value))
+                handleUpdate('zoomDuration', parseFloat(e.target.value))
               }
             />
           </div>

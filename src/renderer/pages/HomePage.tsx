@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Video,
   Plus,
@@ -9,48 +9,56 @@ import {
   Pencil,
   Check,
   ChevronRight,
-} from "lucide-react";
-import "./HomePage.css";
+} from 'lucide-react';
+import type { RecordingInfo } from '../../shared/types';
+import type { NavigateFunction } from '../types';
+import './HomePage.css';
 
 const api = window.electronAPI;
 
 /* ─── Helpers ─────────────────────────────────────────────────────── */
 
-function formatDate(timestamp) {
+function formatDate(timestamp: number): string {
   const d = new Date(timestamp);
   const now = new Date();
-  const diff = now - d;
+  const diff = now.getTime() - d.getTime();
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
 
-  if (mins < 1) return "Just now";
+  if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
   return d.toLocaleDateString();
 }
 
-function formatSize(bytes) {
-  if (!bytes) return "\u2014";
+function formatSize(bytes: number | undefined): string {
+  if (!bytes) return '\u2014';
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
   if (bytes < 1024 * 1024 * 1024)
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
-function formatDuration(seconds) {
-  if (!seconds) return "";
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds) return '';
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
-  return `${m}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 /* ─── Inline Rename Input ─────────────────────────────────────────── */
 
-function InlineRename({ value, onSave, onCancel }) {
+interface InlineRenameProps {
+  value: string;
+  onSave: (newName: string) => void;
+  onCancel: () => void;
+}
+
+function InlineRename({ value, onSave, onCancel }: InlineRenameProps) {
   const [text, setText] = useState(value);
-  const inputRef = useRef(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     inputRef.current?.select();
@@ -62,9 +70,9 @@ function InlineRename({ value, onSave, onCancel }) {
     else onCancel();
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === "Enter") commit();
-    if (e.key === "Escape") onCancel();
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') commit();
+    if (e.key === 'Escape') onCancel();
   };
 
   return (
@@ -87,16 +95,23 @@ function InlineRename({ value, onSave, onCancel }) {
    ProjectCard — single recording in the list
    ═══════════════════════════════════════════════════════════════════ */
 
-function ProjectCard({ rec, onOpen, onDelete, onRename }) {
+interface ProjectCardProps {
+  rec: RecordingInfo;
+  onOpen: (rec: RecordingInfo) => void;
+  onDelete: (sessionDir: string) => void;
+  onRename: (sessionDir: string, newName: string) => Promise<void>;
+}
+
+function ProjectCard({ rec, onOpen, onDelete, onRename }: ProjectCardProps) {
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
-  const handleRename = async (newName) => {
+  const handleRename = async (newName: string) => {
     setRenaming(false);
     await onRename(rec.sessionDir, newName);
   };
 
-  const handleDeleteClick = (e) => {
+  const handleDeleteClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (confirmDelete) {
       onDelete(rec.sessionDir);
@@ -117,7 +132,7 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }) {
             onCancel={() => setRenaming(false)}
           />
         ) : (
-          <span className="hp-card-name">{rec.name || "Untitled"}</span>
+          <span className="hp-card-name">{rec.name || 'Untitled'}</span>
         )}
         <div className="hp-card-meta">
           <span className="hp-meta-item">
@@ -151,7 +166,7 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }) {
             className="hp-action-btn"
             onClick={(e) => {
               e.stopPropagation();
-              api.openOutput(rec.outputPath);
+              api.openOutput(rec.outputPath!);
             }}
             title="Show in folder"
           >
@@ -159,9 +174,9 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }) {
           </button>
         )}
         <button
-          className={`hp-action-btn ${confirmDelete ? "hp-action-btn--danger-active" : "hp-action-btn--danger"}`}
+          className={`hp-action-btn ${confirmDelete ? 'hp-action-btn--danger-active' : 'hp-action-btn--danger'}`}
           onClick={handleDeleteClick}
-          title={confirmDelete ? "Click again to confirm" : "Delete"}
+          title={confirmDelete ? 'Click again to confirm' : 'Delete'}
         >
           {confirmDelete ? <Check size={12} /> : <Trash2 size={12} />}
         </button>
@@ -176,8 +191,12 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }) {
    HomePage — projects list
    ═══════════════════════════════════════════════════════════════════ */
 
-export function HomePage({ onNavigate }) {
-  const [recordings, setRecordings] = useState([]);
+interface HomePageProps {
+  onNavigate: NavigateFunction;
+}
+
+export function HomePage({ onNavigate }: HomePageProps) {
+  const [recordings, setRecordings] = useState<RecordingInfo[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadRecordings = useCallback(async () => {
@@ -186,7 +205,7 @@ export function HomePage({ onNavigate }) {
       const list = await api.getRecordings();
       setRecordings(list || []);
     } catch (err) {
-      console.error("Failed to load recordings:", err);
+      console.error('Failed to load recordings:', err);
       setRecordings([]);
     } finally {
       setLoading(false);
@@ -197,16 +216,16 @@ export function HomePage({ onNavigate }) {
     loadRecordings();
   }, [loadRecordings]);
 
-  const handleDelete = async (sessionDir) => {
+  const handleDelete = async (sessionDir: string) => {
     try {
       await api.deleteRecording(sessionDir);
       setRecordings((prev) => prev.filter((r) => r.sessionDir !== sessionDir));
     } catch (err) {
-      console.error("Failed to delete recording:", err);
+      console.error('Failed to delete recording:', err);
     }
   };
 
-  const handleRename = async (sessionDir, newName) => {
+  const handleRename = async (sessionDir: string, newName: string) => {
     try {
       const saved = await api.renameRecording(sessionDir, newName);
       setRecordings((prev) =>
@@ -215,12 +234,12 @@ export function HomePage({ onNavigate }) {
         ),
       );
     } catch (err) {
-      console.error("Failed to rename recording:", err);
+      console.error('Failed to rename recording:', err);
     }
   };
 
-  const handleOpenProject = (rec) => {
-    onNavigate("review", {
+  const handleOpenProject = (rec: RecordingInfo) => {
+    onNavigate('review', {
       sessionDir: rec.sessionDir,
       name: rec.name,
       size: rec.size,
@@ -237,7 +256,7 @@ export function HomePage({ onNavigate }) {
           <h2>Projects</h2>
           <span className="hp-count">{recordings.length}</span>
         </div>
-        <button className="hp-new-btn" onClick={() => onNavigate("record")}>
+        <button className="hp-new-btn" onClick={() => onNavigate('record')}>
           <Plus size={14} />
           <span>New Recording</span>
         </button>
@@ -258,7 +277,7 @@ export function HomePage({ onNavigate }) {
             </span>
             <button
               className="hp-new-btn hp-new-btn--ghost"
-              onClick={() => onNavigate("record")}
+              onClick={() => onNavigate('record')}
             >
               <Plus size={14} />
               <span>New Recording</span>

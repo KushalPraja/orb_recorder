@@ -6,3 +6,4 @@ recordings/
 .pybuild/
 bin/
 dist/
+.vite/

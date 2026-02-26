@@ -733,8 +733,8 @@ def process_video(
 
 # ─── CLI ─────────────────────────────────────────────────────────────
 
-
 def main():
+    
     parser = argparse.ArgumentParser(
         description="Screen Studio-style video post-processor"
     )

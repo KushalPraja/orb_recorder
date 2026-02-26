@@ -4,16 +4,15 @@
   "version": "1.0.0",
   "description": "Desktop screen recorder with auto zoom/pan effects on clicks and scrolls",
   "author": "Kushal Prajapati",
-  "main": "src/main/index.js",
+  "main": ".vite/build/index.js",
   "scripts": {
-    "dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron . --dev\"",
-    "start": "npm run build:renderer && electron .",
-    "build:renderer": "vite build",
-    "build:processor": "node scripts/build-processor.js",
-    "prepackage": "npm run build:renderer && npm run build:processor",
+    "start": "electron-forge start",
     "package": "electron-forge package",
-    "premake": "npm run build:renderer && npm run build:processor",
-    "make": "electron-forge make"
+    "make": "electron-forge make",
+    "publish": "electron-forge publish",
+    "lint": "eslint --ext .ts,.tsx .",
+    "typecheck": "tsc --noEmit",
+    "build:processor": "node scripts/build-processor.js"
   },
   "dependencies": {
     "electron-squirrel-startup": "^1.0.1",
@@ -24,14 +23,19 @@
     "@electron-forge/core": "^7.11.1",
     "@electron-forge/maker-squirrel": "^7.11.1",
     "@electron-forge/maker-zip": "^7.11.1",
+    "@electron-forge/plugin-vite": "^7.11.1",
+    "@types/electron-squirrel-startup": "^1.0.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.62.0",
+    "@typescript-eslint/parser": "^5.62.0",
     "@vitejs/plugin-react": "^5.1.4",
-    "concurrently": "^9.2.1",
     "electron": "^40.4.1",
     "lucide-react": "^0.575.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-router-dom": "^7.13.0",
-    "vite": "^7.3.1",
-    "wait-on": "^9.0.4"
+    "typescript": "^5.4.5",
+    "vite": "^7.3.1"
   }
 }
