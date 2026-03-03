@@ -1,7 +1,7 @@
 // Recording overlay pill — floating draggable window with stop/pause/discard controls.
 
 import { BrowserWindow, screen } from 'electron';
-import { fromSource } from '../paths';
+import path from 'path';
 import type { OverlayPosition } from '../../shared/types';
 
 let overlayWindow: BrowserWindow | null = null;
@@ -75,7 +75,7 @@ export function showOverlay(position: OverlayPosition): void {
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
   overlayWindow.setIgnoreMouseEvents(false);
 
-  overlayWindow.loadFile(fromSource('src', 'main', 'recording-overlay.html'));
+  overlayWindow.loadFile(path.join(__dirname, 'recording-overlay.html'));
 
   overlayWindow.on('closed', () => {
     overlayWindow = null;

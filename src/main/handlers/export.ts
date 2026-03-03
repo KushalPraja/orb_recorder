@@ -54,12 +54,9 @@ export async function handleProcessVideo(
     const base = app.getAppPath();
     const baseUnpacked = base.replace(/app\.asar$/, 'app.asar.unpacked');
     const candidates = [
-      path.join(baseUnpacked, 'dist', 'renderer', 'Wallpapers', opts.wallpaperFile),
-      path.join(baseUnpacked, 'renderer', 'Wallpapers', opts.wallpaperFile),
-      path.join(base, 'src', 'renderer', 'public', 'Wallpapers', opts.wallpaperFile),
-      path.join(base, '.vite', 'renderer', 'main_window', 'Wallpapers', opts.wallpaperFile),
-      path.join(base, 'dist', 'renderer', 'Wallpapers', opts.wallpaperFile),
-      path.join(base, 'renderer', 'Wallpapers', opts.wallpaperFile),
+      path.join(base, 'dist', 'Wallpapers', opts.wallpaperFile),
+      path.join(baseUnpacked, 'dist', 'Wallpapers', opts.wallpaperFile),
+      path.join(base, 'src', 'renderer', 'public', 'Wallpapers', opts.wallpaperFile),  // dev fallback
     ];
     wallpaperPath =
       candidates.find((p) => fs.existsSync(p) && !p.includes('app.asar\\') && !p.includes('app.asar/'))

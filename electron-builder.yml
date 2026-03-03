@@ -1,0 +1,31 @@
+appId: com.orb.screenrecorder
+productName: Orb
+directories:
+  output: release
+  buildResources: assets
+
+asar: true
+asarUnpack:
+  - "node_modules/uiohook-napi/**"
+  - "dist/Wallpapers/**"
+
+extraResources:
+  - from: bin
+    to: bin
+    filter:
+      - "**/*"
+
+files:
+  - "dist-electron/**"
+  - "dist/**"
+
+win:
+  icon: assets/icons/Document.ico
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false

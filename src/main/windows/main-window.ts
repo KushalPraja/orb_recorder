@@ -2,10 +2,8 @@
 
 import { BrowserWindow } from 'electron';
 import path from 'path';
+import { is } from '@electron-toolkit/utils';
 import { fromRoot } from '../paths';
-
-declare const MAIN_WINDOW_VITE_DEV_SERVER_URL: string | undefined;
-declare const MAIN_WINDOW_VITE_NAME: string;
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -30,8 +28,7 @@ export function createMainWindow(): BrowserWindow {
       height: 32,
     },
     webPreferences: {
-      // Both main.js and preload.js are compiled into the same .vite/build/ dir.
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
@@ -39,12 +36,12 @@ export function createMainWindow(): BrowserWindow {
     },
   });
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
     mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
+      path.join(__dirname, '../../dist/index.html'),
     );
   }
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Page, NavigateFunction } from '../types';
-import logo from '../public/Document.svg';
+import logo from '../Document.svg';
 interface TitlebarProps {
   currentPage: Page;
   onNavigate: NavigateFunction;

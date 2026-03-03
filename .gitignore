@@ -7,3 +7,6 @@ recordings/
 bin/
 dist/
 .vite/
+release/
+*.exe
+dist-electron/

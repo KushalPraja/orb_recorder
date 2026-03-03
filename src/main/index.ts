@@ -2,10 +2,6 @@
 // registers IPC handlers, and manages the app lifecycle.
 
 import { app, BrowserWindow, session, desktopCapturer } from 'electron';
-import squirrelStartup from 'electron-squirrel-startup';
-
-// Handle Windows installer lifecycle events (must be before anything else)
-if (squirrelStartup) app.quit();
 
 import { createMainWindow, getMainWindow } from './windows/main-window';
 import { registerIpcHandlers } from './ipc';
