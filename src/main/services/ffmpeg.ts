@@ -237,7 +237,7 @@ export function remuxToCleanMp4(
     '-i', inputPath,
     '-vf', `fps=${fps}`,
     '-vsync', 'cfr', '-r', String(fps),
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '14',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k',
     '-movflags', '+faststart',
@@ -267,7 +267,7 @@ export function trimVideo(
   const args = [
     '-i', inputPath,
     '-ss', String(startTime), '-to', String(endTime),
-    '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '14',
+    '-c:v', 'libx264', '-preset', 'fast', '-crf', '18',
     '-pix_fmt', 'yuv420p',
     '-c:a', 'aac', '-b:a', '192k',
     '-movflags', '+faststart',
