@@ -119,6 +119,7 @@ export interface ExportOptions {
   background?: boolean;
   cornerRadius?: number;
   padding?: number;
+  shadowBlur?: number;
   backgroundType?: BackgroundType;
   backgroundColor?: string;
   gradientStart?: string;

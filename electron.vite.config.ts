@@ -20,7 +20,6 @@ function copyStaticPlugin(files: { src: string; dest: string }[]) {
 export default defineConfig({
   main: {
     plugins: [
-      externalizeDepsPlugin(),
       copyStaticPlugin([
         {
           src: path.resolve(__dirname, 'src/main/recording-overlay.html'),
@@ -36,7 +35,6 @@ export default defineConfig({
     },
   },
   preload: {
-    plugins: [externalizeDepsPlugin()],
     build: {
       outDir: 'dist-electron/preload',
       rollupOptions: {

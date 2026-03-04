@@ -396,6 +396,7 @@ def process_video(
     with_background=False,
     padding=48,
     corner_radius=12,
+    shadow_blur=0,
     bg_type="solid",
     bg_color="#6366f1",
     gradient_start="#667eea",
@@ -586,6 +587,59 @@ def process_video(
                 _corner_regions.append((ys, xs))
                 _corner_masks.append(m)
 
+    # ── Precompute shadow layer (once, constant for all frames) ──────
+    _shadow_alpha  = None   # float32 (H, W, 1) — darkening amount
+    _shadow_dst_y1 = 0
+    _shadow_dst_x1 = 0
+    _shadow_dst_y2 = 0
+    _shadow_dst_x2 = 0
+    _shadow_src_y1 = 0
+    _shadow_src_x1 = 0
+    _shadow_src_y2 = 0
+    _shadow_src_x2 = 0
+
+    if with_background and shadow_blur > 0:
+        sigma = float(shadow_blur)
+        shadow_oy = max(2, int(sigma * 0.3))
+        shadow_ox = 0
+        pe = int(sigma * 3) + 1  # extra padding for gaussian spread
+
+        # Build shadow source: recording shape with rounded corners if applicable
+        if corner_mask is not None:
+            shadow_src_shape = (corner_mask[:, :, 0] * 255).astype(np.uint8)
+        else:
+            shadow_src_shape = np.full((frame_h, frame_w), 255, dtype=np.uint8)
+
+        # Pad with zeros so gaussian bleeds beyond the solid shape
+        padded_src = cv2.copyMakeBorder(
+            shadow_src_shape, pe, pe, pe, pe, cv2.BORDER_CONSTANT, value=0
+        )
+        kw = max(3, int(sigma * 6))
+        if kw % 2 == 0:
+            kw += 1
+        shadow_blurred = cv2.GaussianBlur(
+            padded_src, (kw, kw), sigma, borderType=cv2.BORDER_CONSTANT
+        )
+        _shadow_alpha = (shadow_blurred.astype(np.float32) / 255.0 * 0.65)[:, :, np.newaxis]
+
+        # Canvas destination rectangle: shadow placed at (pad+ox-pe, pad+oy-pe)
+        _shadow_dst_x1 = pad + shadow_ox - pe
+        _shadow_dst_y1 = pad + shadow_oy - pe
+        _shadow_dst_x2 = _shadow_dst_x1 + padded_src.shape[1]
+        _shadow_dst_y2 = _shadow_dst_y1 + padded_src.shape[0]
+
+        # Precompute clipped source/dest slice indices
+        _shadow_src_x1 = max(0, -_shadow_dst_x1)
+        _shadow_src_y1 = max(0, -_shadow_dst_y1)
+        _shadow_src_x2 = _shadow_alpha.shape[1] - max(0, _shadow_dst_x2 - out_w)
+        _shadow_src_y2 = _shadow_alpha.shape[0] - max(0, _shadow_dst_y2 - out_h)
+        _shadow_dst_x1 = max(0, _shadow_dst_x1)
+        _shadow_dst_y1 = max(0, _shadow_dst_y1)
+        _shadow_dst_x2 = min(out_w, _shadow_dst_x2)
+        _shadow_dst_y2 = min(out_h, _shadow_dst_y2)
+
+        print(f"[Processor] Shadow: sigma={sigma}, offset=({shadow_ox},{shadow_oy}), opacity=0.65", file=sys.stderr)
+
     # ── Initialize camera + ripples ──────────────────────────────
     # Camera operates in canvas space so zoom-crop naturally reveals background
     camera = SmoothCamera(out_w, out_h, fps)
@@ -646,6 +700,22 @@ def process_video(
             # Reuse buffer — copy background then stamp source on top.
             np.copyto(_canvas_buf, bg_frame[:out_h, :out_w])
             canvas = _canvas_buf
+
+            # ── Apply drop shadow to background BEFORE recording stamp ──
+            if (_shadow_alpha is not None
+                    and _shadow_dst_x2 > _shadow_dst_x1
+                    and _shadow_dst_y2 > _shadow_dst_y1):
+                sa = _shadow_alpha[
+                    _shadow_src_y1:_shadow_src_y2,
+                    _shadow_src_x1:_shadow_src_x2
+                ]
+                region = canvas[_shadow_dst_y1:_shadow_dst_y2,
+                                _shadow_dst_x1:_shadow_dst_x2]
+                # Darken background: result = bg * (1 - shadow_alpha)
+                canvas[_shadow_dst_y1:_shadow_dst_y2,
+                       _shadow_dst_x1:_shadow_dst_x2] = (
+                    region.astype(np.float32) * (1.0 - sa)
+                ).astype(np.uint8)
 
             src = frame[:frame_h, :frame_w]
 
@@ -792,6 +862,10 @@ def main():
         help="Path to meta.json containing capture origin coords for coordinate normalization"
     )
     parser.add_argument(
+        "--shadow-blur", type=int, default=0,
+        help="Shadow blur radius in pixels (0 = disabled, default: 0)"
+    )
+    parser.add_argument(
         "--image-blur", default="none", choices=["none", "moderate", "strong"],
         help="Blur strength for image background (default: none)"
     )
@@ -814,6 +888,7 @@ def main():
         with_background=args.background,
         padding=args.padding,
         corner_radius=args.corner_radius,
+        shadow_blur=args.shadow_blur,
         bg_type=args.bg_type,
         bg_color=args.bg_color,
         gradient_start=args.gradient_start,

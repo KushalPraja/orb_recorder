@@ -427,7 +427,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [wallpaperIdx, setWallpaperIdx] = useState(0);
   const [imageBlur, setImageBlur] = useState<ImageBlur>('none');
   const [cornerRadius, setCornerRadius] = useState(12);
-  const [padding, setPadding] = useState(48);
+  const [padding, setPadding] = useState(100);
+  const [shadowBlur, setShadowBlur] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -558,6 +559,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
       background: bgEnabled,
       cornerRadius: bgEnabled ? cornerRadius : 0,
       padding: bgEnabled ? padding : 0,
+      shadowBlur: bgEnabled ? shadowBlur : 0,
       backgroundType: !bgEnabled
         ? undefined
         : bgType === 'color'
@@ -627,6 +629,11 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
 
   const blurPx =
     imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 24 : 0;
+
+  const shadowCss =
+    bgEnabled && shadowBlur > 0
+      ? `0 ${Math.max(1, Math.round(shadowBlur * 0.4))}px ${shadowBlur}px rgba(0,0,0,0.65)`
+      : 'none';
 
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
 
@@ -719,6 +726,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                 className="rv-video"
                 style={{
                   borderRadius: bgEnabled ? `${cornerRadius}px` : 0,
+                  boxShadow: shadowCss,
                 }}
                 onLoadedMetadata={handleLoadedMetadata}
                 onTimeUpdate={handleTimeUpdate}
@@ -946,9 +954,25 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                   <input
                     type="range"
                     min={16}
-                    max={120}
+                    max={150}
                     value={padding}
                     onChange={(e) => setPadding(Number(e.target.value))}
+                    className="rv-slider"
+                  />
+                </div>
+                <div className="rv-field">
+                  <div className="rv-field-header">
+                    <span className="rv-field-label">Shadow</span>
+                    <span className="rv-field-value">
+                      {shadowBlur === 0 ? 'None' : `${shadowBlur}px`}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={40}
+                    value={shadowBlur}
+                    onChange={(e) => setShadowBlur(Number(e.target.value))}
                     className="rv-slider"
                   />
                 </div>

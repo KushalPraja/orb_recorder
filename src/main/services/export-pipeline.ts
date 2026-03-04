@@ -77,6 +77,7 @@ interface PythonProcessorOptions {
   withBackground?: boolean;
   padding?: number;
   cornerRadius?: number;
+  shadowBlur?: number;
   backgroundType?: string;
   backgroundColor?: string;
   gradientStart?: string;
@@ -100,6 +101,7 @@ function runPythonProcessor(
     withBackground = false,
     padding = 48,
     cornerRadius = 12,
+    shadowBlur = 0,
     backgroundType = 'solid',
     backgroundColor = '#6366f1',
     gradientStart = '#667eea',
@@ -128,6 +130,7 @@ function runPythonProcessor(
         '--background',
         '--padding', String(padding),
         '--corner-radius', String(cornerRadius),
+        ...(shadowBlur > 0 ? ['--shadow-blur', String(shadowBlur)] : []),
         '--bg-type', backgroundType,
         '--bg-color', backgroundColor,
         '--gradient-start', gradientStart,
@@ -209,6 +212,7 @@ export interface ProcessVideoOptions {
   background?: boolean;
   cornerRadius?: number;
   padding?: number;
+  shadowBlur?: number;
   backgroundType?: 'solid' | 'gradient' | 'image';
   backgroundColor?: string;
   gradientStart?: string;
@@ -233,6 +237,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     background = false,
     cornerRadius = 12,
     padding = 48,
+    shadowBlur = 0,
     backgroundType = 'solid',
     backgroundColor = '#6366f1',
     gradientStart = '#667eea',
@@ -311,7 +316,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
           }
         },
         withBackground: background,
-        padding, cornerRadius, backgroundType,
+        padding, cornerRadius, shadowBlur, backgroundType,
         backgroundColor, gradientStart, gradientEnd,
         wallpaperPath, imageBlur,
       });
@@ -339,7 +344,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
 
     try {
       await applyVisualExport(currentInput, visualOut, {
-        cornerRadius, padding, backgroundType,
+        cornerRadius, padding, shadowBlur, backgroundType,
         backgroundColor, gradientStart, gradientEnd,
         wallpaperPath, imageBlur,
       }, (p) => {

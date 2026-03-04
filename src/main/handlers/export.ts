@@ -79,6 +79,7 @@ export async function handleProcessVideo(
       background: !!opts.background,
       cornerRadius: opts.cornerRadius ?? 12,
       padding: opts.padding ?? 48,
+      shadowBlur: opts.shadowBlur ?? 0,
       backgroundType: opts.backgroundType ?? 'solid',
       backgroundColor: opts.backgroundColor ?? '#6366f1',
       gradientStart: opts.gradientStart ?? '#667eea',

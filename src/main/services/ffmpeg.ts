@@ -319,6 +319,7 @@ export function hexToRgb(hex: string): [number, number, number] {
 export interface VisualExportOptions {
   cornerRadius?: number;
   padding?: number;
+  shadowBlur?: number;
   backgroundType?: 'solid' | 'gradient' | 'image';
   backgroundColor?: string;
   gradientStart?: string;
@@ -337,6 +338,7 @@ export async function applyVisualExport(
   const {
     cornerRadius = 12,
     padding = 48,
+    shadowBlur = 0,
     backgroundType = 'solid',
     backgroundColor = '#6366f1',
     gradientStart = '#667eea',
@@ -362,99 +364,160 @@ export async function applyVisualExport(
   const frameCount = Number.isFinite(nbFrames) && nbFrames > 0
     ? Math.round(nbFrames) : 0;
 
-  // Pre-generate alpha mask PNG for rounded corners
   const { app } = require('electron');
-  const maskPath = R > 0
-    ? path.join(app.getPath('temp'), `orb_mask_${srcW}x${srcH}_r${R}.png`)
-    : null;
+  const tempDir = app.getPath('temp');
+  const tempFiles: string[] = [];
 
-  if (R > 0 && maskPath) {
+  // Shadow parameters — subtle drop-shadow like Screen Studio
+  const shadowSigma = Math.max(0, Math.round(shadowBlur));
+  const shadowOy = shadowSigma > 0 ? Math.max(2, Math.round(shadowSigma * 0.3)) : 0;
+  const shadowOx = 0;
+  const SHADOW_OPACITY = 0.65;
+
+  // ── Step 1: Generate rounded-corner mask PNG ────────────────────
+  let maskPath: string | null = null;
+  if (R > 0) {
+    maskPath = path.join(tempDir, `orb_mask_${srcW}x${srcH}_r${R}.png`);
+    tempFiles.push(maskPath);
     const alphaExpr = `if(gt(abs(W/2-X),W/2-${R})*gt(abs(H/2-Y),H/2-${R}),if(lte(hypot(${R}-(W/2-abs(W/2-X)),${R}-(H/2-abs(H/2-Y))),${R}),255,0),255)`;
     console.log(`[FFmpeg] Generating rounded-corner mask (${srcW}x${srcH} r=${R})…`);
-    const maskArgs = [
+    await spawnFfmpeg([
       '-f', 'lavfi', '-i', `color=white:s=${srcW}x${srcH}:d=0.04`,
       '-vf', `format=gray,geq=lum='${alphaExpr}'`,
       '-frames:v', '1', '-y', maskPath,
-    ];
-    await spawnFfmpeg(maskArgs).promise;
+    ]).promise;
     console.log('[FFmpeg] Mask generated.');
   }
 
-  function cleanupMask(): void {
-    if (maskPath && fs.existsSync(maskPath)) {
-      try { fs.unlinkSync(maskPath); } catch { /* */ }
+  // ── Step 2: Pre-generate shadow as a static RGBA PNG ────────────
+  // we render it once as a transparent PNG and overlay it as a static image.
+  let shadowPath: string | null = null;
+  if (shadowSigma > 0) {
+    shadowPath = path.join(tempDir, `orb_shadow_${finalW}x${finalH}_r${R}_s${shadowSigma}.png`);
+    tempFiles.push(shadowPath);
+
+    // Extra padding so the gaussian blur can spread beyond the canvas edges
+    const extraPad = Math.ceil(shadowSigma * 3);
+    const workW = finalW + extraPad * 2;
+    const workH = finalH + extraPad * 2;
+
+    console.log(`[FFmpeg] Generating shadow image (${finalW}x${finalH}, sigma=${shadowSigma}, opacity=${SHADOW_OPACITY})…`);
+
+    // Shape source: rounded-corner mask or plain white rectangle
+    const shapeInput = maskPath
+      ? ['-i', maskPath]
+      : ['-f', 'lavfi', '-i', `color=white:s=${srcW}x${srcH}:d=0.04`];
+
+    // Pipeline: shape → pad to working size with offset → blur → crop to canvas → use as alpha of black
+    const shadowFilter = [
+      `[0]format=gray,pad=${workW}:${workH}:${padding + shadowOx + extraPad}:${padding + shadowOy + extraPad}:black,` +
+        `gblur=sigma=${shadowSigma},crop=${finalW}:${finalH}:${extraPad}:${extraPad},format=gray[alpha]`,
+      `[1]format=rgba[base]`,
+      `[base][alpha]alphamerge,colorchannelmixer=aa=${SHADOW_OPACITY}`,
+    ].join(';');
+
+    try {
+      await spawnFfmpeg([
+        ...shapeInput,
+        '-f', 'lavfi', '-i', `color=black:s=${finalW}x${finalH}:d=0.04`,
+        '-filter_complex', shadowFilter,
+        '-pix_fmt', 'rgba',
+        '-frames:v', '1', '-y', shadowPath,
+      ]).promise;
+      console.log('[FFmpeg] Shadow image generated.');
+    } catch (err: any) {
+      console.warn(`[FFmpeg] Shadow generation failed (${err.message}), continuing without shadow.`);
+      shadowPath = null;
+    }
+  }
+
+  function cleanup(): void {
+    for (const f of tempFiles) {
+      if (f && fs.existsSync(f)) {
+        try { fs.unlinkSync(f); } catch { /* */ }
+      }
     }
   }
 
   try {
-    // ── Image background path ─────────────────────────────────────
+    // ── Build inputs ────────────────────────────────────────────────
+    const inputArgs: string[] = ['-i', inputPath]; // index 0: video
+    let nextIdx = 1;
+
+    // Background source (index 1)
+    const bgIdx = nextIdx;
+    let bgSetup: string | null = null;
     if (backgroundType === 'image' && wallpaperPath) {
+      inputArgs.push('-i', wallpaperPath);
       const blurSigma = imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 25 : 0;
-      const blurFilter = blurSigma > 0 ? `,gblur=sigma=${blurSigma}` : '';
-
-      let filterComplex: string;
-      if (R > 0) {
-        filterComplex = [
-          `[1:v]scale=${finalW}:${finalH},setsar=1${blurFilter}[bg]`,
-          `[0:v]format=yuva420p[vid]`,
-          `[2:v]format=gray[mask]`,
-          `[vid][mask]alphamerge[rounded]`,
-          `[bg][rounded]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
-        ].join(';');
-      } else {
-        filterComplex = [
-          `[1:v]scale=${finalW}:${finalH},setsar=1${blurFilter}[bg]`,
-          `[bg][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
-        ].join(';');
-      }
-
-      const args = [
-        '-i', inputPath, '-i', wallpaperPath,
-        ...(R > 0 && maskPath ? ['-loop', '1', '-i', maskPath] : []),
-        '-filter_complex', filterComplex,
-        '-map', '[vout]', '-map', '0:a?',
-        '-c:v', enc, ...qualityFlags,
-        '-c:a', 'aac', '-b:a', '192k',
-        '-pix_fmt', 'yuv420p', '-r', String(outFps),
-        ...(frameCount > 0 ? ['-frames:v', String(frameCount)] : []),
-        '-shortest', '-movflags', '+faststart',
-        '-y', outputPath,
-      ];
-
-      await spawnFfmpeg(args, onProgress, duration).promise;
-      cleanupMask();
-      return outputPath;
-    }
-
-    // ── Solid / gradient color background ─────────────────────────
-    let bgHex = backgroundColor;
-    if (backgroundType === 'gradient') {
-      const [r1, g1, b1] = hexToRgb(gradientStart);
-      const [r2, g2, b2] = hexToRgb(gradientEnd);
-      const rm = Math.round((r1 + r2) / 2).toString(16).padStart(2, '0');
-      const gm = Math.round((g1 + g2) / 2).toString(16).padStart(2, '0');
-      const bm = Math.round((b1 + b2) / 2).toString(16).padStart(2, '0');
-      bgHex = `#${rm}${gm}${bm}`;
-    }
-
-    const bgColor = bgHex.replace('#', '0x');
-
-    let filterComplex: string;
-    if (R > 0) {
-      filterComplex = [
-        `[0:v]format=yuva420p[vid]`,
-        `[2:v]format=gray[mask]`,
-        `[vid][mask]alphamerge[rounded]`,
-        `[1:v][rounded]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`,
-      ].join(';');
+      const blurPart = blurSigma > 0 ? `,gblur=sigma=${blurSigma}` : '';
+      bgSetup = `[${bgIdx}:v]scale=${finalW}:${finalH},setsar=1${blurPart}[bg]`;
     } else {
-      filterComplex = `[1:v][0:v]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`;
+      let bgHex = backgroundColor;
+      if (backgroundType === 'gradient') {
+        const [r1, g1, b1] = hexToRgb(gradientStart);
+        const [r2, g2, b2] = hexToRgb(gradientEnd);
+        const rm = Math.round((r1 + r2) / 2).toString(16).padStart(2, '0');
+        const gm = Math.round((g1 + g2) / 2).toString(16).padStart(2, '0');
+        const bm = Math.round((b1 + b2) / 2).toString(16).padStart(2, '0');
+        bgHex = `#${rm}${gm}${bm}`;
+      }
+      const bgColor = bgHex.replace('#', '0x');
+      inputArgs.push('-f', 'lavfi', '-i', `color=${bgColor}:s=${finalW}x${finalH}:r=${outFps}`);
+      // lavfi color source can be used directly as [N:v], no filter needed
+    }
+    nextIdx++;
+
+    // Mask input (for rounded corners)
+    let maskIdx: number | null = null;
+    if (maskPath) {
+      inputArgs.push('-loop', '1', '-i', maskPath);
+      maskIdx = nextIdx++;
     }
 
+    // Shadow input (pre-generated RGBA PNG)
+    let shadowIdx: number | null = null;
+    if (shadowPath) {
+      inputArgs.push('-loop', '1', '-i', shadowPath);
+      shadowIdx = nextIdx++;
+    }
+
+    // ── Build filter_complex ────────────────────────────────────────
+    // Clean 3-layer compositing: background → shadow overlay → video overlay
+    const filters: string[] = [];
+    let currentBg: string;
+
+    if (bgSetup) {
+      filters.push(bgSetup);
+      currentBg = 'bg';
+    } else {
+      currentBg = `${bgIdx}:v`;
+    }
+
+    // Overlay pre-rendered shadow PNG onto background (single static image — fast)
+    if (shadowIdx !== null) {
+      filters.push(`[${currentBg}][${shadowIdx}:v]overlay=0:0[bg_s]`);
+      currentBg = 'bg_s';
+    }
+
+    // Apply rounded corners to video via alpha merge with mask
+    let videoLabel: string;
+    if (maskIdx !== null) {
+      filters.push(`[0:v]format=yuva420p[vid]`);
+      filters.push(`[${maskIdx}:v]format=gray[mask]`);
+      filters.push(`[vid][mask]alphamerge[rounded]`);
+      videoLabel = 'rounded';
+    } else {
+      videoLabel = '0:v';
+    }
+
+    // Overlay video (or rounded video) centered on background
+    filters.push(`[${currentBg}][${videoLabel}]overlay=(W-w)/2:(H-h)/2,format=yuv420p[vout]`);
+    const filterComplex = filters.join(';');
+
+    // ── Final FFmpeg command ──────────────────────────────────────
     const args = [
-      '-i', inputPath,
-      '-f', 'lavfi', '-i', `color=${bgColor}:s=${finalW}x${finalH}:r=${outFps}`,
-      ...(R > 0 && maskPath ? ['-loop', '1', '-i', maskPath] : []),
+      ...inputArgs,
       '-filter_complex', filterComplex,
       '-map', '[vout]', '-map', '0:a?',
       '-c:v', enc, ...qualityFlags,
@@ -468,11 +531,12 @@ export async function applyVisualExport(
     const { promise } = spawnFfmpeg(args, onProgress, duration);
     try {
       await promise;
-      cleanupMask();
+      cleanup();
       return outputPath;
     } catch (err: any) {
-      // Fallback: simple pad filter without rounded corners
-      console.warn(`[FFmpeg] Rounded export failed (${err.message}), pad fallback…`);
+      // Fallback: simple pad filter without rounded corners or shadow
+      console.warn(`[FFmpeg] Visual export failed (${err.message}), pad fallback…`);
+      const bgColor = backgroundColor.replace('#', '0x');
       const fallbackArgs = [
         '-i', inputPath,
         '-vf', `pad=${finalW}:${finalH}:(ow-iw)/2:(oh-ih)/2:color=${bgColor}`,
@@ -484,11 +548,11 @@ export async function applyVisualExport(
         '-y', outputPath,
       ];
       await spawnFfmpeg(fallbackArgs, onProgress, duration).promise;
-      cleanupMask();
+      cleanup();
       return outputPath;
     }
   } catch (err) {
-    cleanupMask();
+    cleanup();
     throw err;
   }
 }
