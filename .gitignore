@@ -6,3 +6,7 @@ recordings/
 .pybuild/
 bin/
 dist/
+.vite/
+release/
+*.exe
+dist-electron/

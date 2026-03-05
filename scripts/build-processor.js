@@ -70,6 +70,11 @@ function main() {
   run(py, ['-m', 'pip', 'install', 'pyinstaller', 'opencv-python', 'numpy']);
 
   console.log('[BuildProcessor] Building processor executable...');
+
+  // The processor/ package must be bundled alongside the entry point.
+  const processorPkg = path.join(root, 'scripts', 'processor');
+  const addDataSep = process.platform === 'win32' ? ';' : ':';
+
   run(py, [
     '-m',
     'PyInstaller',
@@ -78,6 +83,8 @@ function main() {
     '--onefile',
     '--name',
     'screen_processor',
+    '--add-data',
+    `${processorPkg}${addDataSep}processor`,
     '--distpath',
     distDir,
     '--workpath',
