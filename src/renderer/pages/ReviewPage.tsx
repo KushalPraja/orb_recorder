@@ -390,6 +390,7 @@ function VideoTrimmer({
    ═══════════════════════════════════════════════════════════════════ */
 
 type BgType = 'color' | 'gradient' | 'image';
+type SideTab = 'trim' | 'background' | 'effects' | 'export';
 
 interface ReviewPageProps {
   data: ReviewData | null;
@@ -429,6 +430,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [cornerRadius, setCornerRadius] = useState(12);
   const [padding, setPadding] = useState(100);
   const [shadowBlur, setShadowBlur] = useState(0);
+
+  const [sideTab, setSideTab] = useState<SideTab>('trim');
 
   const videoRef = useRef<HTMLVideoElement>(null);
 
@@ -753,286 +756,319 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
           )}
         </div>
 
-        {/* Right sidebar — unified panel */}
+        {/* Right sidebar — tabbed */}
         <div className="rv-sidebar">
-          <div className="rv-panel">
-            {/* ── Trim section ──────────────────────────────────── */}
-            <div className="rv-section-header">
-              <Scissors size={9} />
-              <span>Trim</span>
-            </div>
-            <div className="rv-section-body">
-              <div className="rv-stat-row">
-                <span className="rv-stat-label">Start</span>
-                <span className="rv-stat-value">{formatTime(trimStart)}</span>
-              </div>
-              <div className="rv-stat-row">
-                <span className="rv-stat-label">End</span>
-                <span className="rv-stat-value">{formatTime(trimEnd)}</span>
-              </div>
-              <div className="rv-stat-row rv-stat-row--highlight">
-                <span className="rv-stat-label">Duration</span>
-                <span className="rv-stat-value rv-stat-value--accent">
-                  {formatTime(trimEnd - trimStart)}
-                </span>
-              </div>
-            </div>
+          {/* Vertical icon tab strip */}
+          <div className="rv-sidebar-tabs">
+            <button
+              className={`rv-tab-btn ${sideTab === 'trim' ? 'active' : ''}`}
+              onClick={() => setSideTab('trim')}
+              title="Trim"
+            >
+              <Scissors size={14} />
+            </button>
+            <button
+              className={`rv-tab-btn ${sideTab === 'background' ? 'active' : ''}`}
+              onClick={() => setSideTab('background')}
+              title="Background"
+            >
+              <Layers size={14} />
+            </button>
+            <button
+              className={`rv-tab-btn ${sideTab === 'effects' ? 'active' : ''}`}
+              onClick={() => setSideTab('effects')}
+              title="Effects"
+            >
+              <Sparkles size={14} />
+            </button>
+            <button
+              className={`rv-tab-btn ${sideTab === 'export' ? 'active' : ''}`}
+              onClick={() => setSideTab('export')}
+              title="Export"
+            >
+              <Download size={14} />
+            </button>
+          </div>
 
-            {/* ── Effects section ───────────────────────────────── */}
-            <div className="rv-section-header">
-              <Sparkles size={9} />
-              <span>Effects</span>
-            </div>
-            <div className="rv-section-body">
-              <div className="rv-option-row">
-                <div className="rv-option-info">
-                  <Film size={12} className="rv-option-icon" />
-                  <div className="rv-option-text">
-                    <span className="rv-option-name">Auto-Zoom</span>
-                    <span className="rv-option-desc">Follow cursor clicks</span>
-                  </div>
+          {/* Tab content panel */}
+          <div className="rv-sidebar-content">
+
+            {/* ── Trim tab ──────────────────────────────────────── */}
+            {sideTab === 'trim' && (
+              <div className="rv-panel">
+                <div className="rv-section-header">
+                  <Scissors size={9} />
+                  <span>Trim</span>
                 </div>
-                <label className="rv-toggle">
-                  <input
-                    type="checkbox"
-                    checked={autoZoom}
-                    onChange={(e) => setAutoZoom(e.target.checked)}
-                  />
-                  <span className="rv-toggle-track" />
-                </label>
-              </div>
-            </div>
-
-            <div className="rv-section-body">
-              {/* Toggle row — same pattern as Auto-Zoom */}
-              <div className="rv-option-row">
-                <div className="rv-option-info">
-                  <Layers size={12} className="rv-option-icon" />
-                  <div className="rv-option-text">
-                    <span className="rv-option-name">Background</span>
-                    <span className="rv-option-desc">
-                      Add canvas behind video
+                <div className="rv-section-body">
+                  <div className="rv-stat-row">
+                    <span className="rv-stat-label">Start</span>
+                    <span className="rv-stat-value">{formatTime(trimStart)}</span>
+                  </div>
+                  <div className="rv-stat-row">
+                    <span className="rv-stat-label">End</span>
+                    <span className="rv-stat-value">{formatTime(trimEnd)}</span>
+                  </div>
+                  <div className="rv-stat-row rv-stat-row--highlight">
+                    <span className="rv-stat-label">Duration</span>
+                    <span className="rv-stat-value rv-stat-value--accent">
+                      {formatTime(trimEnd - trimStart)}
                     </span>
                   </div>
                 </div>
-                <label className="rv-toggle">
-                  <input
-                    type="checkbox"
-                    checked={bgEnabled}
-                    onChange={(e) => setBgEnabled(e.target.checked)}
-                  />
-                  <span className="rv-toggle-track" />
-                </label>
               </div>
+            )}
 
-              {/* Collapsible sub-panel — only shown when enabled */}
-              <div className={`rv-bg-sub ${bgEnabled ? 'open' : ''}`}>
-                {/* Type selector — 3 options only */}
-                <div className="rv-field">
-                  <span className="rv-field-label">Style</span>
-                  <div className="rv-bg-type-selector">
-                    {(['color', 'gradient', 'image'] as const).map((t) => (
-                      <button
-                        key={t}
-                        className={`rv-bg-type-btn ${bgType === t ? 'active' : ''}`}
-                        onClick={() => setBgType(t)}
-                      >
-                        {t === 'color'
-                          ? 'Color'
-                          : t === 'gradient'
-                            ? 'Gradient'
-                            : 'Image'}
-                      </button>
-                    ))}
-                  </div>
+            {/* ── Background tab ────────────────────────────────── */}
+            {sideTab === 'background' && (
+              <div className="rv-panel">
+                <div className="rv-section-header">
+                  <Layers size={9} />
+                  <span>Background</span>
                 </div>
-
-                {/* Color picker */}
-                {bgType === 'color' && (
-                  <div className="rv-field">
-                    <div className="rv-field-header">
-                      <span className="rv-field-label">Color</span>
-                      <input
-                        type="color"
-                        value={bgColor}
-                        onChange={(e) => setBgColor(e.target.value)}
-                        className="rv-color-input"
-                      />
-                    </div>
-                    <div className="rv-swatches">
-                      {COLOR_PRESETS.map((c, i) => (
-                        <button
-                          key={i}
-                          className={`rv-swatch ${bgColor === c ? 'active' : ''}`}
-                          style={{ background: c }}
-                          title={c}
-                          onClick={() => setBgColor(c)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Gradient presets */}
-                {bgType === 'gradient' && (
-                  <div className="rv-field">
-                    <span className="rv-field-label">Preset</span>
-                    <div className="rv-swatches">
-                      {GRADIENT_PRESETS.map((g, i) => (
-                        <button
-                          key={i}
-                          className={`rv-swatch ${gradientIdx === i ? 'active' : ''}`}
-                          style={{
-                            background: `linear-gradient(135deg, ${g.start}, ${g.end})`,
-                          }}
-                          title={g.name}
-                          onClick={() => setGradientIdx(i)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Image wallpaper picker */}
-                {bgType === 'image' && (
-                  <>
-                    <div className="rv-field">
-                      <span className="rv-field-label">Wallpaper</span>
-                      <div className="rv-wallpaper-grid">
-                        {WALLPAPERS.map((w, i) => (
-                          <button
-                            key={i}
-                            className={`rv-wallpaper-thumb ${wallpaperIdx === i ? 'active' : ''}`}
-                            style={{
-                              backgroundImage: `url(./Wallpapers/${w})`,
-                            }}
-                            title={w
-                              .replace(/-thumb\.(jpg|jpeg)$/i, '')
-                              .replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
-                            onClick={() => setWallpaperIdx(i)}
-                          />
-                        ))}
+                <div className="rv-section-body">
+                  <div className="rv-option-row">
+                    <div className="rv-option-info">
+                      <Layers size={12} className="rv-option-icon" />
+                      <div className="rv-option-text">
+                        <span className="rv-option-name">Enable</span>
+                        <span className="rv-option-desc">Add canvas behind video</span>
                       </div>
                     </div>
+                    <label className="rv-toggle">
+                      <input
+                        type="checkbox"
+                        checked={bgEnabled}
+                        onChange={(e) => setBgEnabled(e.target.checked)}
+                      />
+                      <span className="rv-toggle-track" />
+                    </label>
+                  </div>
+
+                  <div className={`rv-bg-sub ${bgEnabled ? 'open' : ''}`}>
+                    {/* Type selector */}
                     <div className="rv-field">
-                      <span className="rv-field-label">Blur</span>
-                      <div className="rv-blur-options">
-                        {(['none', 'moderate', 'strong'] as const).map((b) => (
+                      <span className="rv-field-label">Style</span>
+                      <div className="rv-bg-type-selector">
+                        {(['color', 'gradient', 'image'] as const).map((t) => (
                           <button
-                            key={b}
-                            className={`rv-blur-btn ${imageBlur === b ? 'active' : ''}`}
-                            onClick={() => setImageBlur(b)}
+                            key={t}
+                            className={`rv-bg-type-btn ${bgType === t ? 'active' : ''}`}
+                            onClick={() => setBgType(t)}
                           >
-                            {b.charAt(0).toUpperCase() + b.slice(1)}
+                            {t === 'color' ? 'Color' : t === 'gradient' ? 'Gradient' : 'Image'}
                           </button>
                         ))}
                       </div>
                     </div>
-                  </>
-                )}
 
-                {/* Radius + Padding */}
-                <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Radius</span>
-                    <span className="rv-field-value">{cornerRadius}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={32}
-                    value={cornerRadius}
-                    onChange={(e) => setCornerRadius(Number(e.target.value))}
-                    className="rv-slider"
-                  />
-                </div>
-                <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Padding</span>
-                    <span className="rv-field-value">{padding}px</span>
-                  </div>
-                  <input
-                    type="range"
-                    min={16}
-                    max={150}
-                    value={padding}
-                    onChange={(e) => setPadding(Number(e.target.value))}
-                    className="rv-slider"
-                  />
-                </div>
-                <div className="rv-field">
-                  <div className="rv-field-header">
-                    <span className="rv-field-label">Shadow</span>
-                    <span className="rv-field-value">
-                      {shadowBlur === 0 ? 'None' : `${shadowBlur}px`}
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={40}
-                    value={shadowBlur}
-                    onChange={(e) => setShadowBlur(Number(e.target.value))}
-                    className="rv-slider"
-                  />
-                </div>
-              </div>
-            </div>
+                    {/* Color picker */}
+                    {bgType === 'color' && (
+                      <div className="rv-field">
+                        <div className="rv-field-header">
+                          <span className="rv-field-label">Color</span>
+                          <input
+                            type="color"
+                            value={bgColor}
+                            onChange={(e) => setBgColor(e.target.value)}
+                            className="rv-color-input"
+                          />
+                        </div>
+                        <div className="rv-swatches">
+                          {COLOR_PRESETS.map((c, i) => (
+                            <button
+                              key={i}
+                              className={`rv-swatch ${bgColor === c ? 'active' : ''}`}
+                              style={{ background: c }}
+                              title={c}
+                              onClick={() => setBgColor(c)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
-            {/* Panel footer — actions moved into sidebar */}
-            <div className="rv-panel-footer">
-              {done ? (
-                <>
-                  <button
-                    className="rv-btn rv-btn--primary"
-                    onClick={handleOpen}
-                  >
-                    <FolderOpen size={14} />
-                    <span>Show in Folder</span>
-                  </button>
-                  <button
-                    className="rv-btn rv-btn--secondary"
-                    onClick={handleReExport}
-                  >
-                    <RotateCcw size={14} />
-                    <span>Re-export</span>
-                  </button>
-                  <button
-                    className="rv-btn rv-btn--secondary"
-                    onClick={() => onNavigate('home')}
-                  >
-                    Done
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    className="rv-btn rv-btn--primary"
-                    onClick={handleExport}
-                    disabled={processing}
-                  >
-                    {processing ? (
+                    {/* Gradient presets */}
+                    {bgType === 'gradient' && (
+                      <div className="rv-field">
+                        <span className="rv-field-label">Preset</span>
+                        <div className="rv-swatches">
+                          {GRADIENT_PRESETS.map((g, i) => (
+                            <button
+                              key={i}
+                              className={`rv-swatch ${gradientIdx === i ? 'active' : ''}`}
+                              style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
+                              title={g.name}
+                              onClick={() => setGradientIdx(i)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Image wallpaper picker */}
+                    {bgType === 'image' && (
                       <>
-                        <Loader2 size={14} className="spinner" />
-                        <span>Exporting…</span>
-                      </>
-                    ) : (
-                      <>
-                        <Download size={14} />
-                        <span>Export</span>
+                        <div className="rv-field">
+                          <span className="rv-field-label">Wallpaper</span>
+                          <div className="rv-wallpaper-grid">
+                            {WALLPAPERS.map((w, i) => (
+                              <button
+                                key={i}
+                                className={`rv-wallpaper-thumb ${wallpaperIdx === i ? 'active' : ''}`}
+                                style={{ backgroundImage: `url(./Wallpapers/${w})` }}
+                                title={w
+                                  .replace(/-thumb\.(jpg|jpeg)$/i, '')
+                                  .replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
+                                onClick={() => setWallpaperIdx(i)}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rv-field">
+                          <span className="rv-field-label">Blur</span>
+                          <div className="rv-blur-options">
+                            {(['none', 'moderate', 'strong'] as const).map((b) => (
+                              <button
+                                key={b}
+                                className={`rv-blur-btn ${imageBlur === b ? 'active' : ''}`}
+                                onClick={() => setImageBlur(b)}
+                              >
+                                {b.charAt(0).toUpperCase() + b.slice(1)}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
                       </>
                     )}
-                  </button>
-                  <button
-                    className="rv-btn rv-btn--danger"
-                    onClick={handleDiscard}
-                    disabled={processing}
-                  >
-                    <span>Discard</span>
-                  </button>
-                </>
-              )}
-            </div>
+
+                    {/* Radius + Padding + Shadow */}
+                    <div className="rv-field">
+                      <div className="rv-field-header">
+                        <span className="rv-field-label">Radius</span>
+                        <span className="rv-field-value">{cornerRadius}px</span>
+                      </div>
+                      <input
+                        type="range" min={0} max={32} value={cornerRadius}
+                        onChange={(e) => setCornerRadius(Number(e.target.value))}
+                        className="rv-slider"
+                      />
+                    </div>
+                    <div className="rv-field">
+                      <div className="rv-field-header">
+                        <span className="rv-field-label">Padding</span>
+                        <span className="rv-field-value">{padding}px</span>
+                      </div>
+                      <input
+                        type="range" min={16} max={150} value={padding}
+                        onChange={(e) => setPadding(Number(e.target.value))}
+                        className="rv-slider"
+                      />
+                    </div>
+                    <div className="rv-field">
+                      <div className="rv-field-header">
+                        <span className="rv-field-label">Shadow</span>
+                        <span className="rv-field-value">
+                          {shadowBlur === 0 ? 'None' : `${shadowBlur}px`}
+                        </span>
+                      </div>
+                      <input
+                        type="range" min={0} max={40} value={shadowBlur}
+                        onChange={(e) => setShadowBlur(Number(e.target.value))}
+                        className="rv-slider"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Effects tab ───────────────────────────────────── */}
+            {sideTab === 'effects' && (
+              <div className="rv-panel">
+                <div className="rv-section-header">
+                  <Sparkles size={9} />
+                  <span>Effects</span>
+                </div>
+                <div className="rv-section-body">
+                  <div className="rv-option-row">
+                    <div className="rv-option-info">
+                      <Film size={12} className="rv-option-icon" />
+                      <div className="rv-option-text">
+                        <span className="rv-option-name">Auto-Zoom</span>
+                        <span className="rv-option-desc">Follow cursor clicks</span>
+                      </div>
+                    </div>
+                    <label className="rv-toggle">
+                      <input
+                        type="checkbox"
+                        checked={autoZoom}
+                        onChange={(e) => setAutoZoom(e.target.checked)}
+                      />
+                      <span className="rv-toggle-track" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Export tab ────────────────────────────────────── */}
+            {sideTab === 'export' && (
+              <div className="rv-panel">
+                <div className="rv-section-header">
+                  <Download size={9} />
+                  <span>Export</span>
+                </div>
+                <div className="rv-panel-footer">
+                  {done ? (
+                    <>
+                      <button className="rv-btn rv-btn--primary" onClick={handleOpen}>
+                        <FolderOpen size={14} />
+                        <span>Show in Folder</span>
+                      </button>
+                      <button className="rv-btn rv-btn--secondary" onClick={handleReExport}>
+                        <RotateCcw size={14} />
+                        <span>Re-export</span>
+                      </button>
+                      <button
+                        className="rv-btn rv-btn--secondary"
+                        onClick={() => onNavigate('home')}
+                      >
+                        Done
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="rv-btn rv-btn--primary"
+                        onClick={handleExport}
+                        disabled={processing}
+                      >
+                        {processing ? (
+                          <>
+                            <Loader2 size={14} className="spinner" />
+                            <span>Exporting…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={14} />
+                            <span>Export</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        className="rv-btn rv-btn--danger"
+                        onClick={handleDiscard}
+                        disabled={processing}
+                      >
+                        <span>Discard</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
