@@ -10,3 +10,5 @@ dist/
 release/
 *.exe
 dist-electron/
+.claude/
+skills-lock.json
