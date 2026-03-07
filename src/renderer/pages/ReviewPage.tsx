@@ -7,27 +7,30 @@ import {
   Play,
   Pause,
   Scissors,
-  Clock,
   Sparkles,
   SkipBack,
   SkipForward,
   ArrowLeft,
   RotateCcw,
   FolderOpen,
+  Trash2,
+  X,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
+import { Slider } from '@/components/ui/slider';
+import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { cn } from '@/lib/utils';
 import type { NavigateFunction, ReviewData } from '../types';
 import type { ImageBlur } from '../../shared/types';
-import './ReviewPage.css';
 
 const api = window.electronAPI;
 
-/* ─── Background presets ──────────────────────────────────────────── */
-
-interface GradientPreset {
-  name: string;
-  start: string;
-  end: string;
-}
+interface GradientPreset { name: string; start: string; end: string; }
 
 const GRADIENT_PRESETS: GradientPreset[] = [
   { name: 'Graphite', start: '#1a1a1a', end: '#0f0f0f' },
@@ -40,36 +43,16 @@ const GRADIENT_PRESETS: GradientPreset[] = [
   { name: 'Ember', start: '#1a0a00', end: '#2d1200' },
 ];
 
-const COLOR_PRESETS: string[] = [
-  '#1e293b',
-  '#18181b',
-  '#2a2a2a',
-  '#3a3a3a',
-  '#d4d4d4',
-  '#f8fafc',
-  '#0f172a',
-  '#450a0a',
-];
+const COLOR_PRESETS: string[] = ['#1e293b','#18181b','#2a2a2a','#3a3a3a','#d4d4d4','#f8fafc','#0f172a','#450a0a'];
 
 const WALLPAPERS: string[] = [
-  '10-14-Day-Thumb.jpg',
-  '10-15-Day-thumb.jpg',
-  '10-15-Night-thumb.jpg',
-  '11-0-Color-Day-thumbnails.jpg',
-  '11-0-Day-thumbnail.jpg',
-  '12-Light-thumbnail.jpg',
-  '13-Ventura-Light-thumb.jpg',
-  '14-Sonoma-Horizon-thumb.jpeg',
-  '14-Sonoma-Light-thumb.jpg',
-  '15-Sequoia-Dark-thumbnail.jpg',
-  '15-Sequoia-Light-thumbnail.jpg',
-  '26-Tahoe-Beach-Day-thumb.jpeg',
-  '26-Tahoe-Beach-Dusk-thumb.jpeg',
-  '26-Tahoe-Dark-6K-thumb.jpeg',
-  '26-Tahoe-Light-6K-thumb.jpeg',
+  '10-14-Day-Thumb.jpg','10-15-Day-thumb.jpg','10-15-Night-thumb.jpg',
+  '11-0-Color-Day-thumbnails.jpg','11-0-Day-thumbnail.jpg','12-Light-thumbnail.jpg',
+  '13-Ventura-Light-thumb.jpg','14-Sonoma-Horizon-thumb.jpeg','14-Sonoma-Light-thumb.jpg',
+  '15-Sequoia-Dark-thumbnail.jpg','15-Sequoia-Light-thumbnail.jpg',
+  '26-Tahoe-Beach-Day-thumb.jpeg','26-Tahoe-Beach-Dusk-thumb.jpeg',
+  '26-Tahoe-Dark-6K-thumb.jpeg','26-Tahoe-Light-6K-thumb.jpeg',
 ];
-
-/* ─── Helpers ─────────────────────────────────────────────────────── */
 
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00.0';
@@ -87,8 +70,7 @@ function formatTimecode(seconds: number): string {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   VideoTrimmer — timeline scrubber with start/end trim handles,
-   thumbnail strip, and playhead.
+   VideoTrimmer — professional NLE-style timeline
    ═══════════════════════════════════════════════════════════════════ */
 
 type DragTarget = 'start' | 'end' | 'playhead';
@@ -103,282 +85,218 @@ interface VideoTrimmerProps {
   onSeek: (time: number) => void;
   isPlaying: boolean;
   onPlayPause: () => void;
+  onSkipBack: () => void;
+  onSkipForward: () => void;
 }
 
+const HANDLE_W = 10; // px width of each trim handle
+
 function VideoTrimmer({
-  videoSrc,
-  duration,
-  trimStart,
-  trimEnd,
-  onTrimChange,
-  currentTime,
-  onSeek,
-  isPlaying,
-  onPlayPause,
+  videoSrc, duration, trimStart, trimEnd, onTrimChange,
+  currentTime, onSeek, isPlaying, onPlayPause, onSkipBack, onSkipForward,
 }: VideoTrimmerProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<DragTarget | null>(null);
   const [thumbnails, setThumbnails] = useState<(string | null)[]>([]);
   const [thumbsLoaded, setThumbsLoaded] = useState(false);
 
-  /* ── Generate thumbnail strip from video frames ───────────────── */
   useEffect(() => {
     if (!videoSrc || !duration || duration <= 0) return;
-
     let cancelled = false;
     setThumbsLoaded(false);
-
     const video = document.createElement('video');
-    video.src = videoSrc;
-    video.muted = true;
-    video.preload = 'auto';
-
+    video.src = videoSrc; video.muted = true; video.preload = 'auto';
     const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 90;
+    canvas.width = 160; canvas.height = 90;
     const ctx = canvas.getContext('2d')!;
-
-    const THUMB_COUNT = 20;
+    const THUMB_COUNT = 40;
     const thumbs: (string | null)[] = [];
 
     video.addEventListener('loadeddata', async () => {
       for (let i = 0; i < THUMB_COUNT && !cancelled; i++) {
         const time = ((i + 0.5) / THUMB_COUNT) * duration;
         video.currentTime = Math.min(time, duration - 0.05);
-        await new Promise<void>((resolve) => {
-          video.onseeked = () => resolve();
-          setTimeout(resolve, 600);
-        });
+        await new Promise<void>((resolve) => { video.onseeked = () => resolve(); setTimeout(resolve, 600); });
         if (cancelled) break;
-        try {
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          thumbs.push(canvas.toDataURL('image/jpeg', 0.5));
-        } catch {
-          thumbs.push(null);
-        }
+        try { ctx.drawImage(video, 0, 0, canvas.width, canvas.height); thumbs.push(canvas.toDataURL('image/jpeg', 0.5)); }
+        catch { thumbs.push(null); }
       }
-      if (!cancelled) {
-        setThumbnails([...thumbs]);
-        setThumbsLoaded(true);
-      }
+      if (!cancelled) { setThumbnails([...thumbs]); setThumbsLoaded(true); }
       video.src = '';
     });
-
-    video.addEventListener('error', () => {
-      if (!cancelled) setThumbsLoaded(true);
-    });
-
-    return () => {
-      cancelled = true;
-      video.src = '';
-    };
+    video.addEventListener('error', () => { if (!cancelled) setThumbsLoaded(true); });
+    return () => { cancelled = true; video.src = ''; };
   }, [videoSrc, duration]);
 
-  /* ── Position helpers ─────────────────────────────────────────── */
-  const posToTime = useCallback(
-    (clientX: number): number => {
-      const rect = trackRef.current?.getBoundingClientRect();
-      if (!rect || !duration) return 0;
-      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-      return pct * duration;
-    },
-    [duration],
-  );
+  const posToTime = useCallback((clientX: number): number => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || !duration) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration;
+  }, [duration]);
 
-  /* ── Drag interaction ─────────────────────────────────────────── */
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent, type: DragTarget) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setDragging(type);
-      document.body.style.cursor = type === 'playhead' ? 'grabbing' : 'ew-resize';
-    },
-    [],
-  );
+  const handlePointerDown = useCallback((e: React.PointerEvent, type: DragTarget) => {
+    e.preventDefault(); e.stopPropagation();
+    setDragging(type);
+    document.body.style.cursor = type === 'playhead' ? 'grabbing' : 'ew-resize';
+  }, []);
 
-  const handleTrackClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (dragging) return;
-      const time = posToTime(e.clientX);
-      const clamped = Math.max(trimStart, Math.min(time, trimEnd));
-      onSeek(clamped);
-    },
-    [dragging, posToTime, trimStart, trimEnd, onSeek],
-  );
+  const handleTrackClick = useCallback((e: React.MouseEvent) => {
+    if (dragging) return;
+    const time = posToTime(e.clientX);
+    onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
+  }, [dragging, posToTime, trimStart, trimEnd, onSeek]);
 
   useEffect(() => {
     if (!dragging) return;
-
     const MIN_CLIP = 0.5;
-
     const handleMove = (e: PointerEvent) => {
       const time = posToTime(e.clientX);
-      if (dragging === 'start') {
-        onTrimChange(Math.max(0, Math.min(time, trimEnd - MIN_CLIP)), trimEnd);
-      } else if (dragging === 'end') {
-        onTrimChange(
-          trimStart,
-          Math.min(duration, Math.max(time, trimStart + MIN_CLIP)),
-        );
-      } else if (dragging === 'playhead') {
-        onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
-      }
+      if (dragging === 'start') onTrimChange(Math.max(0, Math.min(time, trimEnd - MIN_CLIP)), trimEnd);
+      else if (dragging === 'end') onTrimChange(trimStart, Math.min(duration, Math.max(time, trimStart + MIN_CLIP)));
+      else if (dragging === 'playhead') onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
     };
-
-    const handleUp = () => {
-      setDragging(null);
-      document.body.style.cursor = '';
-    };
-
+    const handleUp = () => { setDragging(null); document.body.style.cursor = ''; };
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', handleUp);
-    return () => {
-      document.removeEventListener('pointermove', handleMove);
-      document.removeEventListener('pointerup', handleUp);
-    };
+    return () => { document.removeEventListener('pointermove', handleMove); document.removeEventListener('pointerup', handleUp); };
   }, [dragging, posToTime, trimStart, trimEnd, duration, onTrimChange, onSeek]);
 
-  /* ── Computed positions ───────────────────────────────────────── */
   const startPct = duration > 0 ? (trimStart / duration) * 100 : 0;
   const endPct = duration > 0 ? (trimEnd / duration) * 100 : 100;
   const playheadPct = duration > 0 ? (currentTime / duration) * 100 : 0;
   const clipDuration = trimEnd - trimStart;
 
-  /* ── Skip controls ────────────────────────────────────────────── */
-  const skipBackward = useCallback(() => {
-    onSeek(Math.max(trimStart, currentTime - 1));
-  }, [onSeek, currentTime, trimStart]);
-
-  const skipForward = useCallback(() => {
-    onSeek(Math.min(trimEnd, currentTime + 1));
-  }, [onSeek, currentTime, trimEnd]);
-
-  /* ── Render ───────────────────────────────────────────────────── */
   return (
-    <div className="trimmer">
-      {/* Trim time badges */}
-      <div className="trimmer-info">
-        <div className="trimmer-badge trimmer-badge--start">
-          <Scissors size={10} />
+    <div className="shrink-0 flex flex-col bg-card border-t border-border/60">
+      {/* Transport controls */}
+      <div className="flex items-center justify-between px-3 h-8">
+        <div className="flex items-center gap-1.5 text-[10px] font-mono text-muted-foreground tabular-nums">
+          <Scissors size={9} className="opacity-50" />
           <span>{formatTime(trimStart)}</span>
-        </div>
-        <div className="trimmer-badge trimmer-badge--clip">
-          <Clock size={10} />
-          <span>{formatTime(clipDuration)}</span>
-        </div>
-        <div className="trimmer-badge trimmer-badge--end">
+          <span className="opacity-30">{'\u2013'}</span>
           <span>{formatTime(trimEnd)}</span>
-          <Scissors size={10} style={{ transform: 'scaleX(-1)' }} />
-        </div>
-      </div>
-
-      {/* Timeline track */}
-      <div className="trimmer-track" ref={trackRef} onClick={handleTrackClick}>
-        {/* Thumbnail strip */}
-        <div className="trimmer-thumbs">
-          {thumbsLoaded && thumbnails.length > 0
-            ? thumbnails.map((src, i) =>
-                src ? (
-                  <img
-                    key={i}
-                    src={src}
-                    className="trimmer-thumb"
-                    draggable={false}
-                    alt=""
-                  />
-                ) : (
-                  <div key={i} className="trimmer-thumb trimmer-thumb--empty" />
-                ),
-              )
-            : !thumbsLoaded && (
-                <div className="trimmer-thumbs-loading">
-                  <div className="trimmer-thumbs-shimmer" />
-                </div>
-              )}
         </div>
 
-        {/* Dimmed regions outside selection */}
-        <div
-          className="trimmer-dim trimmer-dim--left"
-          style={{ width: `${startPct}%` }}
-        />
-        <div
-          className="trimmer-dim trimmer-dim--right"
-          style={{ width: `${100 - endPct}%` }}
-        />
-
-        {/* Selection highlight border */}
-        <div
-          className="trimmer-selection"
-          style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
-        />
-
-        {/* Start handle */}
-        <div
-          className={`trimmer-handle trimmer-handle--start ${dragging === 'start' ? 'active' : ''}`}
-          style={{ left: `${startPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, 'start')}
-        >
-          <div className="trimmer-handle-bar">
-            <span />
-            <span />
-          </div>
-        </div>
-
-        {/* End handle */}
-        <div
-          className={`trimmer-handle trimmer-handle--end ${dragging === 'end' ? 'active' : ''}`}
-          style={{ left: `${endPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, 'end')}
-        >
-          <div className="trimmer-handle-bar">
-            <span />
-            <span />
-          </div>
-        </div>
-
-        {/* Playhead */}
-        <div
-          className={`trimmer-playhead ${dragging === 'playhead' ? 'active' : ''}`}
-          style={{ left: `${playheadPct}%` }}
-          onPointerDown={(e) => handlePointerDown(e, 'playhead')}
-        >
-          <div className="trimmer-playhead-head" />
-          <div className="trimmer-playhead-line" />
-        </div>
-      </div>
-
-      {/* Playback controls */}
-      <div className="trimmer-controls">
-        <div className="trimmer-controls-left">
-          <button
-            className="trimmer-ctrl-btn"
-            onClick={skipBackward}
-            title="Back 1s"
-          >
-            <SkipBack size={12} />
-          </button>
-          <button
-            className="trimmer-play-btn"
+        <div className="flex items-center gap-0.5">
+          <Button variant="ghost" size="icon-xs" className="rounded-sm" onClick={onSkipBack}>
+            <SkipBack size={11} />
+          </Button>
+          <Button
+            variant="secondary"
+            size="icon-sm"
+            className="rounded-sm"
             onClick={onPlayPause}
-            title={isPlaying ? 'Pause' : 'Play'}
           >
-            {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-          </button>
-          <button
-            className="trimmer-ctrl-btn"
-            onClick={skipForward}
-            title="Forward 1s"
-          >
-            <SkipForward size={12} />
-          </button>
+            {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-px" />}
+          </Button>
+          <Button variant="ghost" size="icon-xs" className="rounded-sm" onClick={onSkipForward}>
+            <SkipForward size={11} />
+          </Button>
         </div>
-        <div className="trimmer-controls-right">
-          <span className="trimmer-time-current">
+
+        <div className="flex items-center gap-1 font-mono tabular-nums">
+          <span className="text-[11px] font-medium text-foreground">
             {formatTime(currentTime)}
           </span>
-          <span className="trimmer-time-sep">/</span>
-          <span className="trimmer-time-total">{formatTime(clipDuration)}</span>
+          <span className="text-[10px] text-muted-foreground/40">/</span>
+          <span className="text-[10px] text-muted-foreground">
+            {formatTime(clipDuration)}
+          </span>
+        </div>
+      </div>
+
+      {/* Timeline track with padding so handles never clip */}
+      <div className="px-[10px] pb-1">
+        <div
+          className="relative h-11 bg-muted rounded-sm cursor-pointer select-none"
+          ref={trackRef}
+          onClick={handleTrackClick}
+        >
+          {/* Thumbnail strip — full opacity, dimming is handled by overlay regions */}
+          <div className="absolute inset-0 flex rounded-sm overflow-hidden">
+            {thumbsLoaded && thumbnails.length > 0
+              ? thumbnails.map((src, i) =>
+                  src ? (
+                    <img key={i} src={src} className="flex-1 min-w-0 object-cover" draggable={false} alt="" />
+                  ) : (
+                    <div key={i} className="flex-1 min-w-0 bg-muted" />
+                  ),
+                )
+              : (
+                  <div className="w-full h-full bg-muted flex items-center justify-center gap-2">
+                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                    <span className="text-[10px] text-muted-foreground">Loading timeline...</span>
+                  </div>
+                )}
+          </div>
+
+          {/* Dimmed regions */}
+          <div
+            className="absolute top-0 bottom-0 left-0 bg-black/55 z-[4] pointer-events-none rounded-l-sm"
+            style={{ width: `${startPct}%` }}
+          />
+          <div
+            className="absolute top-0 bottom-0 right-0 bg-black/55 z-[4] pointer-events-none rounded-r-sm"
+            style={{ width: `${100 - endPct}%` }}
+          />
+
+          {/* Selected region top/bottom highlight */}
+          <div
+            className="absolute top-0 bottom-0 border-y-2 border-primary/50 pointer-events-none z-[5]"
+            style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
+          />
+
+          {/* Start handle — sits inside selection, at left edge */}
+          <div
+            className={cn(
+              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/80 hover:bg-primary transition-colors rounded-l-sm',
+              dragging === 'start' && 'bg-primary'
+            )}
+            style={{ left: `${startPct}%`, width: `${HANDLE_W}px` }}
+            onPointerDown={(e) => handlePointerDown(e, 'start')}
+          >
+            <div className="flex gap-[2px]">
+              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+            </div>
+          </div>
+
+          {/* End handle — sits inside selection, at right edge */}
+          <div
+            className={cn(
+              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/80 hover:bg-primary transition-colors rounded-r-sm',
+              dragging === 'end' && 'bg-primary'
+            )}
+            style={{ right: `${100 - endPct}%`, width: `${HANDLE_W}px` }}
+            onPointerDown={(e) => handlePointerDown(e, 'end')}
+          >
+            <div className="flex gap-[2px]">
+              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+            </div>
+          </div>
+
+          {/* Playhead */}
+          <div
+            className={cn(
+              'absolute top-0 bottom-0 z-[15] cursor-grab pointer-events-auto flex justify-center',
+              dragging === 'playhead' && 'cursor-grabbing'
+            )}
+            style={{ left: `${playheadPct}%`, width: '12px', transform: 'translateX(-50%)' }}
+            onPointerDown={(e) => handlePointerDown(e, 'playhead')}
+          >
+            {/* Playhead line */}
+            <div className="w-px h-full bg-foreground shadow-[0_0_3px_rgba(0,0,0,0.5)]" />
+            {/* Top triangle indicator */}
+            <div
+              className="absolute -top-px left-1/2 -translate-x-1/2 w-0 h-0"
+              style={{
+                borderLeft: '4px solid transparent',
+                borderRight: '4px solid transparent',
+                borderTop: '5px solid var(--foreground)',
+              }}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -386,11 +304,53 @@ function VideoTrimmer({
 }
 
 /* ═══════════════════════════════════════════════════════════════════
-   ReviewPage — export screen with video trimmer + settings sidebar.
+   Discard Confirmation Modal
+   ═══════════════════════════════════════════════════════════════════ */
+
+function DiscardModal({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: () => void }) {
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onCancel();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [onCancel]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onCancel}>
+      <div
+        className="bg-card border border-border rounded-lg p-5 w-[340px] flex flex-col gap-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Discard Recording</h3>
+          <Button variant="ghost" size="icon-xs" className="rounded-sm" onClick={onCancel}>
+            <X size={12} />
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          This will permanently delete this recording and all associated files. This action cannot be undone.
+        </p>
+        <div className="flex gap-2 justify-end">
+          <Button variant="outline" size="sm" className="rounded-md px-3" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="destructive" size="sm" className="rounded-md px-3" onClick={onConfirm}>
+            <Trash2 size={12} />
+            Discard
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   ReviewPage
    ═══════════════════════════════════════════════════════════════════ */
 
 type BgType = 'color' | 'gradient' | 'image';
-type SideTab = 'trim' | 'background' | 'effects' | 'export';
+type SideTab = 'trim' | 'background' | 'effects';
 
 interface ReviewPageProps {
   data: ReviewData | null;
@@ -398,28 +358,19 @@ interface ReviewPageProps {
 }
 
 export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
-  /* state — remux */
   const [remuxing, setRemuxing] = useState(false);
   const [cleanPath, setCleanPath] = useState<string | null>(null);
-
-  /* state — video */
   const [videoDuration, setVideoDuration] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  /* state — trim */
   const [trimStart, setTrimStart] = useState(0);
   const [trimEnd, setTrimEnd] = useState(0);
-
-  /* state — processing */
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState('');
   const [done, setDone] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  /* state — export options */
   const [autoZoom, setAutoZoom] = useState(false);
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgType, setBgType] = useState<BgType>('gradient');
@@ -430,665 +381,444 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [cornerRadius, setCornerRadius] = useState(12);
   const [padding, setPadding] = useState(100);
   const [shadowBlur, setShadowBlur] = useState(0);
-
   const [sideTab, setSideTab] = useState<SideTab>('trim');
-
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  /* Whether we came from the home page (existing project) vs fresh recording */
-  const isExistingProject = !!data?.fromHome;
-
-  /* ─── Remux on mount ─────────────────────────────────────────────── */
   useEffect(() => {
     if (!data?.sessionDir) return;
-    setRemuxing(true);
-    setError(null);
-    api
-      .remuxVideo(data.sessionDir)
-      .then((p) => {
-        setCleanPath(p);
-        setRemuxing(false);
-      })
-      .catch((err: Error) => {
-        setError(`Failed to prepare video: ${err.message}`);
-        setRemuxing(false);
-      });
+    setRemuxing(true); setError(null);
+    api.remuxVideo(data.sessionDir)
+      .then((p) => { setCleanPath(p); setRemuxing(false); })
+      .catch((err: Error) => { setError(`Failed to prepare video: ${err.message}`); setRemuxing(false); });
   }, [data?.sessionDir]);
 
-  /* ─── Load video preview ─────────────────────────────────────────── */
-  useEffect(() => {
-    if (cleanPath && videoRef.current) {
-      videoRef.current.src = `file://${cleanPath}`;
-    }
-  }, [cleanPath]);
+  useEffect(() => { if (cleanPath && videoRef.current) videoRef.current.src = `file://${cleanPath}`; }, [cleanPath]);
 
-  /* ─── IPC listeners ──────────────────────────────────────────────── */
   useEffect(() => {
-    const off1 = api.onProgress((d) => {
-      setProgress(d.percent);
-      if (d.phase) setPhase(d.phase);
-    });
-    const off2 = api.onProcessingDone((d) => {
-      setOutputPath(d.outputPath);
-      setDone(true);
-      setProcessing(false);
-      setProgress(100);
-    });
-    const off3 = api.onProcessingError((d) => {
-      setError(d.error);
-      setProcessing(false);
-    });
-    return () => {
-      off1();
-      off2();
-      off3();
-    };
+    const off1 = api.onProgress((d) => { setProgress(d.percent); if (d.phase) setPhase(d.phase); });
+    const off2 = api.onProcessingDone((d) => { setOutputPath(d.outputPath); setDone(true); setProcessing(false); setProgress(100); });
+    const off3 = api.onProcessingError((d) => { setError(d.error); setProcessing(false); });
+    return () => { off1(); off2(); off3(); };
   }, []);
 
-  /* ─── Video event handlers ───────────────────────────────────────── */
   const handleLoadedMetadata = useCallback(() => {
     const dur = videoRef.current?.duration || 0;
-    if (Number.isFinite(dur) && dur > 0) {
-      setVideoDuration(dur);
-      setTrimEnd(dur);
-    }
+    if (Number.isFinite(dur) && dur > 0) { setVideoDuration(dur); setTrimEnd(dur); }
   }, []);
 
   const handleTimeUpdate = useCallback(() => {
     const time = videoRef.current?.currentTime || 0;
     setCurrentTime(time);
-    if (time >= trimEnd - 0.05) {
-      videoRef.current!.pause();
-      videoRef.current!.currentTime = trimStart;
-      setIsPlaying(false);
-    }
+    if (time >= trimEnd - 0.05) { videoRef.current!.pause(); videoRef.current!.currentTime = trimStart; setIsPlaying(false); }
   }, [trimStart, trimEnd]);
 
   const handlePlayPause = useCallback(() => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      if (videoRef.current.currentTime >= trimEnd - 0.1) {
-        videoRef.current.currentTime = trimStart;
-      }
-      if (
-        videoRef.current.currentTime < trimStart ||
-        videoRef.current.currentTime > trimEnd
-      ) {
-        videoRef.current.currentTime = trimStart;
-      }
-      videoRef.current.play();
-      setIsPlaying(true);
+    if (isPlaying) { videoRef.current.pause(); setIsPlaying(false); }
+    else {
+      if (videoRef.current.currentTime >= trimEnd - 0.1) videoRef.current.currentTime = trimStart;
+      if (videoRef.current.currentTime < trimStart || videoRef.current.currentTime > trimEnd) videoRef.current.currentTime = trimStart;
+      videoRef.current.play(); setIsPlaying(true);
     }
   }, [isPlaying, trimStart, trimEnd]);
 
   const handleSeek = useCallback((time: number) => {
-    if (videoRef.current) {
-      videoRef.current.currentTime = time;
-      setCurrentTime(time);
-    }
+    if (videoRef.current) { videoRef.current.currentTime = time; setCurrentTime(time); }
   }, []);
 
-  const handleTrimChange = useCallback((start: number, end: number) => {
-    setTrimStart(start);
-    setTrimEnd(end);
-  }, []);
+  const handleTrimChange = useCallback((start: number, end: number) => { setTrimStart(start); setTrimEnd(end); }, []);
 
-  /* ─── Export handler ─────────────────────────────────────────────── */
+  const skipBackward = useCallback(() => { handleSeek(Math.max(trimStart, currentTime - 1)); }, [handleSeek, currentTime, trimStart]);
+  const skipForward = useCallback(() => { handleSeek(Math.min(trimEnd, currentTime + 1)); }, [handleSeek, currentTime, trimEnd]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      if (showDiscardModal) return;
+      if (e.code === 'Space') { e.preventDefault(); handlePlayPause(); }
+      if (e.code === 'ArrowLeft') { e.preventDefault(); skipBackward(); }
+      if (e.code === 'ArrowRight') { e.preventDefault(); skipForward(); }
+      if (e.code === 'KeyJ') { e.preventDefault(); skipBackward(); }
+      if (e.code === 'KeyL') { e.preventDefault(); skipForward(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handlePlayPause, skipBackward, skipForward, showDiscardModal]);
+
   const gradient = GRADIENT_PRESETS[gradientIdx];
 
   const handleExport = async () => {
     if (!data?.sessionDir) return;
-
     const defaultName = data.name || 'recording';
     const exportPath = await api.pickExportPath(defaultName);
     if (!exportPath) return;
-
-    setProcessing(true);
-    setError(null);
-    setProgress(0);
-    setDone(false);
-    setOutputPath(null);
-
-    const isTrimmed =
-      trimStart > 0.1 || (videoDuration > 0 && trimEnd < videoDuration - 0.1);
-
+    setProcessing(true); setError(null); setProgress(0); setDone(false); setOutputPath(null);
+    const isTrimmed = trimStart > 0.1 || (videoDuration > 0 && trimEnd < videoDuration - 0.1);
     const exportOpts = {
-      sessionDir: data.sessionDir,
-      exportPath,
-      autoZoom,
-      background: bgEnabled,
-      cornerRadius: bgEnabled ? cornerRadius : 0,
-      padding: bgEnabled ? padding : 0,
-      shadowBlur: bgEnabled ? shadowBlur : 0,
-      backgroundType: !bgEnabled
-        ? undefined
-        : bgType === 'color'
-          ? ('solid' as const)
-          : bgType === 'gradient'
-            ? ('gradient' as const)
-            : ('image' as const),
+      sessionDir: data.sessionDir, exportPath, autoZoom,
+      background: bgEnabled, cornerRadius: bgEnabled ? cornerRadius : 0,
+      padding: bgEnabled ? padding : 0, shadowBlur: bgEnabled ? shadowBlur : 0,
+      backgroundType: !bgEnabled ? undefined : bgType === 'color' ? ('solid' as const) : bgType === 'gradient' ? ('gradient' as const) : ('image' as const),
       backgroundColor: bgEnabled && bgType === 'color' ? bgColor : undefined,
-      gradientStart:
-        bgEnabled && bgType === 'gradient' ? gradient.start : undefined,
-      gradientEnd:
-        bgEnabled && bgType === 'gradient' ? gradient.end : undefined,
-      wallpaperFile:
-        bgEnabled && bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
+      gradientStart: bgEnabled && bgType === 'gradient' ? gradient.start : undefined,
+      gradientEnd: bgEnabled && bgType === 'gradient' ? gradient.end : undefined,
+      wallpaperFile: bgEnabled && bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
       imageBlur: bgEnabled && bgType === 'image' ? imageBlur : ('none' as const),
       ...(isTrimmed && { trimStart, trimEnd }),
     };
-
-    try {
-      await api.processVideo(exportOpts);
-    } catch (err: any) {
-      setError(err.message);
-      setProcessing(false);
-    }
+    try { await api.processVideo(exportOpts); }
+    catch (err: any) { setError(err.message); setProcessing(false); }
   };
 
   const handleDiscard = async () => {
-    if (!data?.sessionDir) {
-      onNavigate('home');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      await api.deleteRecording(data.sessionDir);
-    } catch (err: any) {
-      setError(err?.message || 'Failed to delete project');
-      setProcessing(false);
-      return;
-    }
-    setProcessing(false);
-    onNavigate('home');
+    setShowDiscardModal(false);
+    if (!data?.sessionDir) { onNavigate('home'); return; }
+    try { setProcessing(true); await api.deleteRecording(data.sessionDir); }
+    catch (err: any) { setError(err?.message || 'Failed to delete project'); setProcessing(false); return; }
+    setProcessing(false); onNavigate('home');
   };
 
-  const handleOpen = () => {
-    if (outputPath) api.openOutput(outputPath);
-  };
+  const handleOpen = () => { if (outputPath) api.openOutput(outputPath); };
+  const handleReExport = () => { setDone(false); setOutputPath(null); setProgress(0); setPhase(''); setError(null); };
 
-  const handleReExport = () => {
-    setDone(false);
-    setOutputPath(null);
-    setProgress(0);
-    setPhase('');
-    setError(null);
-  };
-
-  /* ─── Preview background CSS ─────────────────────────────────────── */
-  const previewCanvasBg = !bgEnabled
-    ? 'var(--bg-secondary)'
-    : bgType === 'color'
-      ? bgColor
-      : bgType === 'gradient'
-        ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})`
-        : bgType === 'image'
-          ? 'transparent'
-          : 'var(--bg-secondary)';
-
-  const blurPx =
-    imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 24 : 0;
-
-  const shadowCss =
-    bgEnabled && shadowBlur > 0
-      ? `0 ${Math.max(1, Math.round(shadowBlur * 0.4))}px ${shadowBlur}px rgba(0,0,0,0.65)`
-      : 'none';
-
+  const previewCanvasBg = !bgEnabled ? 'hsl(var(--card))' : bgType === 'color' ? bgColor : bgType === 'gradient' ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` : bgType === 'image' ? 'transparent' : 'hsl(var(--card))';
+  const blurPx = imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 24 : 0;
+  const shadowCss = bgEnabled && shadowBlur > 0 ? `0 ${Math.max(1, Math.round(shadowBlur * 0.4))}px ${shadowBlur}px rgba(0,0,0,0.65)` : 'none';
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
 
-  /* ─── Empty state ────────────────────────────────────────────────── */
   if (!data) {
     return (
-      <div className="review-page">
-        <div className="review-empty">
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col items-center justify-center gap-3 flex-1 text-muted-foreground text-sm">
           <p>No recording to review</p>
-          <button
-            className="rv-btn rv-btn--secondary"
-            onClick={() => onNavigate('home')}
-          >
-            Go Home
-          </button>
+          <Button variant="outline" size="sm" className="rounded-md" onClick={() => onNavigate('home')}>Go Home</Button>
         </div>
       </div>
     );
   }
 
-  /* ─── Loading state (remuxing) ───────────────────────────────────── */
   if (remuxing) {
     return (
-      <div className="review-page">
-        <div className="review-loading">
-          <div className="review-loading-spinner">
-            <Loader2 size={28} className="spinner" />
-          </div>
-          <p>Preparing editor preview…</p>
-          <span>Converting to seekable format</span>
+      <div className="flex flex-col h-full overflow-hidden">
+        <div className="flex flex-col items-center justify-center flex-1 gap-3">
+          <Loader2 size={24} className="animate-spin text-muted-foreground" />
+          <p className="text-sm font-medium text-foreground">Preparing preview...</p>
+          <span className="text-xs text-muted-foreground">Converting to seekable format</span>
         </div>
       </div>
     );
   }
 
-  /* ─── Main render ────────────────────────────────────────────────── */
+  const sideTabItems = [
+    { id: 'trim' as const, icon: Scissors, label: 'Trim' },
+    { id: 'background' as const, icon: Layers, label: 'Background' },
+    { id: 'effects' as const, icon: Sparkles, label: 'Effects' },
+  ];
+
   return (
-    <div className="review-page">
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="rv-header">
-        <div className="rv-header-left">
-          <button
-            className="rv-back-btn"
-            onClick={() => onNavigate('home')}
-            title="Back to projects"
-          >
-            <ArrowLeft size={14} />
-          </button>
-          <h2>{data.name || 'Export'}</h2>
-          <div className="rv-header-badges">
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Discard confirmation modal */}
+      {showDiscardModal && (
+        <DiscardModal
+          onConfirm={handleDiscard}
+          onCancel={() => setShowDiscardModal(false)}
+        />
+      )}
+
+      {/* Header with export/discard actions */}
+      <div className="flex items-center justify-between px-3 h-9 shrink-0 border-b border-border/50 bg-card/30">
+        <div className="flex items-center gap-2 min-w-0">
+          <Button variant="ghost" size="icon-xs" className="rounded-sm shrink-0" onClick={() => onNavigate('home')}>
+            <ArrowLeft size={13} />
+          </Button>
+          <h2 className="text-xs font-semibold text-foreground truncate">{data.name || 'Export'}</h2>
+          <div className="flex items-center gap-1 shrink-0">
             {data.size && (
-              <span className="rv-badge rv-badge--muted">
+              <Badge variant="secondary" className="text-[10px] font-mono rounded-sm px-1.5 py-0">
                 {(data.size / (1024 * 1024)).toFixed(1)} MB
-              </span>
+              </Badge>
             )}
             {videoDuration > 0 && (
-              <span className="rv-badge rv-badge--accent">
+              <Badge variant="outline" className="text-[10px] font-mono rounded-sm px-1.5 py-0">
                 {formatTimecode(videoDuration)}
-              </span>
+              </Badge>
             )}
           </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {processing && (
+            <div className="flex items-center gap-2 mr-1">
+              <div className="w-24">
+                <Progress value={progress} className="h-1" />
+              </div>
+              <span className="text-[10px] text-muted-foreground font-mono tabular-nums whitespace-nowrap">
+                {phase || 'Processing'} {progress}%
+              </span>
+            </div>
+          )}
+          {done ? (
+            <>
+              <Button size="sm" className="rounded-md gap-1 h-6 text-[11px] px-2.5" onClick={handleOpen}>
+                <FolderOpen size={11} /> Open
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-md gap-1 h-6 text-[11px] px-2.5" onClick={handleReExport}>
+                <RotateCcw size={11} /> Re-export
+              </Button>
+              <Button variant="outline" size="sm" className="rounded-md h-6 text-[11px] px-2.5" onClick={() => onNavigate('home')}>
+                Done
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="rounded-md gap-1 h-6 text-[11px] px-2 text-muted-foreground hover:text-destructive"
+                onClick={() => setShowDiscardModal(true)}
+                disabled={processing}
+              >
+                <Trash2 size={11} />
+                Discard
+              </Button>
+              <Button size="sm" className="rounded-md gap-1 h-6 text-[11px] px-3" onClick={handleExport} disabled={processing}>
+                {processing ? (<><Loader2 size={11} className="animate-spin" /> Exporting...</>) : (<><Download size={11} /> Export</>)}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
-      {/* ── Body: left (video+trimmer) + right (sidebar) ────────── */}
-      <div className="rv-body">
-        {/* Left pane */}
-        <div className="rv-left">
-          {/* Video preview */}
-          <div className="rv-preview-wrap">
-            {/* Blurred image background layer */}
-            {bgEnabled && bgType === 'image' && (
-              <div
-                className="rv-preview-bg-image"
-                style={{
-                  backgroundImage: `url(./Wallpapers/${WALLPAPERS[wallpaperIdx]})`,
-                  filter: blurPx > 0 ? `blur(${blurPx}px)` : 'none',
-                }}
-              />
-            )}
+      {/* Body: video + sidebar */}
+      <div className="flex-1 overflow-hidden flex min-h-0">
+        {/* Left: video preview */}
+        <div className="flex-1 min-w-0 flex items-center justify-center bg-background overflow-hidden relative">
+          {bgEnabled && bgType === 'image' && (
             <div
-              className="rv-preview-canvas"
-              style={{
-                background: previewCanvasBg,
-                padding: bgEnabled ? `${Math.round(padding / 4)}px` : 0,
-              }}
-            >
-              <video
-                ref={videoRef}
-                className="rv-video"
-                style={{
-                  borderRadius: bgEnabled ? `${cornerRadius}px` : 0,
-                  boxShadow: shadowCss,
-                }}
-                onLoadedMetadata={handleLoadedMetadata}
-                onTimeUpdate={handleTimeUpdate}
-                onEnded={() => setIsPlaying(false)}
-                onPause={() => setIsPlaying(false)}
-                onPlay={() => setIsPlaying(true)}
-              />
-            </div>
-          </div>
-
-          {/* Timeline trimmer */}
-          {videoDuration > 0 && (
-            <VideoTrimmer
-              videoSrc={videoSrc}
-              duration={videoDuration}
-              trimStart={trimStart}
-              trimEnd={trimEnd}
-              onTrimChange={handleTrimChange}
-              currentTime={currentTime}
-              onSeek={handleSeek}
-              isPlaying={isPlaying}
-              onPlayPause={handlePlayPause}
+              className="absolute -inset-[30px] bg-cover bg-center z-0"
+              style={{ backgroundImage: `url(./Wallpapers/${WALLPAPERS[wallpaperIdx]})`, filter: blurPx > 0 ? `blur(${blurPx}px)` : 'none' }}
             />
           )}
+          <div
+            className="flex items-center justify-center w-full h-full relative z-[1] transition-all duration-200"
+            style={{ background: previewCanvasBg, padding: bgEnabled ? `${Math.round(padding / 4)}px` : 0 }}
+          >
+            <video
+              ref={videoRef}
+              className="block max-w-full max-h-full w-auto h-auto object-contain bg-black outline-none shrink min-w-0 min-h-0"
+              style={{ borderRadius: bgEnabled ? `${cornerRadius}px` : 0, boxShadow: shadowCss }}
+              onLoadedMetadata={handleLoadedMetadata}
+              onTimeUpdate={handleTimeUpdate}
+              onEnded={() => setIsPlaying(false)}
+              onPause={() => setIsPlaying(false)}
+              onPlay={() => setIsPlaying(true)}
+            />
+          </div>
         </div>
 
-        {/* Right sidebar — tabbed */}
-        <div className="rv-sidebar">
-          {/* Vertical icon tab strip */}
-          <div className="rv-sidebar-tabs">
-            <button
-              className={`rv-tab-btn ${sideTab === 'trim' ? 'active' : ''}`}
-              onClick={() => setSideTab('trim')}
-              title="Trim"
-            >
-              <Scissors size={14} />
-            </button>
-            <button
-              className={`rv-tab-btn ${sideTab === 'background' ? 'active' : ''}`}
-              onClick={() => setSideTab('background')}
-              title="Background"
-            >
-              <Layers size={14} />
-            </button>
-            <button
-              className={`rv-tab-btn ${sideTab === 'effects' ? 'active' : ''}`}
-              onClick={() => setSideTab('effects')}
-              title="Effects"
-            >
-              <Sparkles size={14} />
-            </button>
-            <button
-              className={`rv-tab-btn ${sideTab === 'export' ? 'active' : ''}`}
-              onClick={() => setSideTab('export')}
-              title="Export"
-            >
-              <Download size={14} />
-            </button>
+        {/* Right sidebar */}
+        <div className="w-[270px] shrink-0 flex flex-row bg-card/50 border-l border-border/50 h-full overflow-hidden">
+          {/* Tab strip */}
+          <div className="w-9 shrink-0 flex flex-col items-center bg-background/50 pt-1.5 gap-0.5">
+            {sideTabItems.map(({ id, icon: Icon, label }) => (
+              <Button
+                key={id}
+                variant="ghost"
+                size="icon-sm"
+                className={cn(
+                  'rounded-sm transition-colors duration-100',
+                  sideTab === id
+                    ? 'text-foreground bg-secondary'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+                onClick={() => setSideTab(id)}
+                title={label}
+              >
+                <Icon size={13} />
+              </Button>
+            ))}
           </div>
 
-          {/* Tab content panel */}
-          <div className="rv-sidebar-content">
-
-            {/* ── Trim tab ──────────────────────────────────────── */}
+          {/* Tab content */}
+          <ScrollArea className="flex-1 min-w-0 h-full">
             {sideTab === 'trim' && (
-              <div className="rv-panel">
-                <div className="rv-section-header">
-                  <Scissors size={9} />
-                  <span>Trim</span>
-                </div>
-                <div className="rv-section-body">
-                  <div className="rv-stat-row">
-                    <span className="rv-stat-label">Start</span>
-                    <span className="rv-stat-value">{formatTime(trimStart)}</span>
+              <div className="flex flex-col">
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Trim</div>
+                <div className="mx-3 bg-secondary/30 rounded-md overflow-hidden divide-y divide-border/30">
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">Start</span>
+                    <span className="text-[11px] text-foreground font-medium font-mono tabular-nums">{formatTime(trimStart)}</span>
                   </div>
-                  <div className="rv-stat-row">
-                    <span className="rv-stat-label">End</span>
-                    <span className="rv-stat-value">{formatTime(trimEnd)}</span>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">End</span>
+                    <span className="text-[11px] text-foreground font-medium font-mono tabular-nums">{formatTime(trimEnd)}</span>
                   </div>
-                  <div className="rv-stat-row rv-stat-row--highlight">
-                    <span className="rv-stat-label">Duration</span>
-                    <span className="rv-stat-value rv-stat-value--accent">
-                      {formatTime(trimEnd - trimStart)}
-                    </span>
+                  <div className="flex items-center justify-between px-3 py-2">
+                    <span className="text-[11px] text-muted-foreground">Duration</span>
+                    <span className="text-[11px] text-foreground font-semibold font-mono tabular-nums">{formatTime(trimEnd - trimStart)}</span>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ── Background tab ────────────────────────────────── */}
             {sideTab === 'background' && (
-              <div className="rv-panel">
-                <div className="rv-section-header">
-                  <Layers size={9} />
-                  <span>Background</span>
-                </div>
-                <div className="rv-section-body">
-                  <div className="rv-option-row">
-                    <div className="rv-option-info">
-                      <Layers size={12} className="rv-option-icon" />
-                      <div className="rv-option-text">
-                        <span className="rv-option-name">Enable</span>
-                        <span className="rv-option-desc">Add canvas behind video</span>
-                      </div>
+              <div className="flex flex-col">
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Background</div>
+                <div className="mx-3 flex flex-col gap-2.5">
+                  <div className="flex items-center justify-between px-1">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-[11px] font-medium text-foreground">Enable</span>
+                      <span className="text-[9px] text-muted-foreground">Canvas behind video</span>
                     </div>
-                    <label className="rv-toggle">
-                      <input
-                        type="checkbox"
-                        checked={bgEnabled}
-                        onChange={(e) => setBgEnabled(e.target.checked)}
-                      />
-                      <span className="rv-toggle-track" />
-                    </label>
+                    <Switch checked={bgEnabled} onCheckedChange={setBgEnabled} />
                   </div>
 
-                  <div className={`rv-bg-sub ${bgEnabled ? 'open' : ''}`}>
-                    {/* Type selector */}
-                    <div className="rv-field">
-                      <span className="rv-field-label">Style</span>
-                      <div className="rv-bg-type-selector">
-                        {(['color', 'gradient', 'image'] as const).map((t) => (
-                          <button
-                            key={t}
-                            className={`rv-bg-type-btn ${bgType === t ? 'active' : ''}`}
-                            onClick={() => setBgType(t)}
-                          >
-                            {t === 'color' ? 'Color' : t === 'gradient' ? 'Gradient' : 'Image'}
-                          </button>
-                        ))}
-                      </div>
+                  <div className={cn('flex flex-col gap-2.5 overflow-hidden transition-all duration-200', bgEnabled ? 'max-h-[800px] opacity-100' : 'max-h-0 opacity-0')}>
+                    <div className="flex flex-col gap-1.5">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Style</span>
+                      <ToggleGroup
+                        value={[bgType]}
+                        onValueChange={(v) => { const val = v[v.length - 1]; if (val) setBgType(val as BgType); }}
+                        className="w-full"
+                      >
+                        <ToggleGroupItem value="color" className="flex-1 text-[10px] rounded-sm">Color</ToggleGroupItem>
+                        <ToggleGroupItem value="gradient" className="flex-1 text-[10px] rounded-sm">Gradient</ToggleGroupItem>
+                        <ToggleGroupItem value="image" className="flex-1 text-[10px] rounded-sm">Image</ToggleGroupItem>
+                      </ToggleGroup>
                     </div>
 
-                    {/* Color picker */}
                     {bgType === 'color' && (
-                      <div className="rv-field">
-                        <div className="rv-field-header">
-                          <span className="rv-field-label">Color</span>
-                          <input
-                            type="color"
-                            value={bgColor}
-                            onChange={(e) => setBgColor(e.target.value)}
-                            className="rv-color-input"
-                          />
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Color</span>
+                          <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)}
+                            className="w-6 h-5 p-0 border border-border rounded-sm bg-transparent cursor-pointer shrink-0 [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-sm" />
                         </div>
-                        <div className="rv-swatches">
+                        <div className="flex gap-1.5 flex-wrap">
                           {COLOR_PRESETS.map((c, i) => (
-                            <button
-                              key={i}
-                              className={`rv-swatch ${bgColor === c ? 'active' : ''}`}
-                              style={{ background: c }}
-                              title={c}
-                              onClick={() => setBgColor(c)}
-                            />
+                            <button key={i}
+                              className={cn('w-5 h-5 rounded-sm border-2 border-transparent cursor-pointer transition-all hover:scale-110', bgColor === c && 'border-foreground/40 ring-1 ring-foreground/10')}
+                              style={{ background: c }} title={c} onClick={() => setBgColor(c)} />
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Gradient presets */}
                     {bgType === 'gradient' && (
-                      <div className="rv-field">
-                        <span className="rv-field-label">Preset</span>
-                        <div className="rv-swatches">
+                      <div className="flex flex-col gap-1.5">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Preset</span>
+                        <div className="flex gap-1.5 flex-wrap">
                           {GRADIENT_PRESETS.map((g, i) => (
-                            <button
-                              key={i}
-                              className={`rv-swatch ${gradientIdx === i ? 'active' : ''}`}
-                              style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }}
-                              title={g.name}
-                              onClick={() => setGradientIdx(i)}
-                            />
+                            <button key={i}
+                              className={cn('w-5 h-5 rounded-sm border-2 border-transparent cursor-pointer transition-all hover:scale-110', gradientIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
+                              style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }} title={g.name} onClick={() => setGradientIdx(i)} />
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {/* Image wallpaper picker */}
                     {bgType === 'image' && (
                       <>
-                        <div className="rv-field">
-                          <span className="rv-field-label">Wallpaper</span>
-                          <div className="rv-wallpaper-grid">
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Wallpaper</span>
+                          <div className="grid grid-cols-4 gap-1.5">
                             {WALLPAPERS.map((w, i) => (
-                              <button
-                                key={i}
-                                className={`rv-wallpaper-thumb ${wallpaperIdx === i ? 'active' : ''}`}
+                              <button key={i}
+                                className={cn('aspect-[16/10] bg-cover bg-center rounded-sm border-2 border-transparent cursor-pointer transition-all p-0 hover:scale-105', wallpaperIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
                                 style={{ backgroundImage: `url(./Wallpapers/${w})` }}
-                                title={w
-                                  .replace(/-thumb\.(jpg|jpeg)$/i, '')
-                                  .replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
-                                onClick={() => setWallpaperIdx(i)}
-                              />
+                                title={w.replace(/-thumb\.(jpg|jpeg)$/i, '').replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
+                                onClick={() => setWallpaperIdx(i)} />
                             ))}
                           </div>
                         </div>
-                        <div className="rv-field">
-                          <span className="rv-field-label">Blur</span>
-                          <div className="rv-blur-options">
-                            {(['none', 'moderate', 'strong'] as const).map((b) => (
-                              <button
-                                key={b}
-                                className={`rv-blur-btn ${imageBlur === b ? 'active' : ''}`}
-                                onClick={() => setImageBlur(b)}
-                              >
-                                {b.charAt(0).toUpperCase() + b.slice(1)}
-                              </button>
-                            ))}
-                          </div>
+                        <div className="flex flex-col gap-1.5">
+                          <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">Blur</span>
+                          <ToggleGroup value={[imageBlur]} onValueChange={(v) => { const val = v[v.length - 1]; if (val) setImageBlur(val as ImageBlur); }} className="w-full">
+                            <ToggleGroupItem value="none" className="flex-1 text-[10px] rounded-sm">None</ToggleGroupItem>
+                            <ToggleGroupItem value="moderate" className="flex-1 text-[10px] rounded-sm">Moderate</ToggleGroupItem>
+                            <ToggleGroupItem value="strong" className="flex-1 text-[10px] rounded-sm">Strong</ToggleGroupItem>
+                          </ToggleGroup>
                         </div>
                       </>
                     )}
 
-                    {/* Radius + Padding + Shadow */}
-                    <div className="rv-field">
-                      <div className="rv-field-header">
-                        <span className="rv-field-label">Radius</span>
-                        <span className="rv-field-value">{cornerRadius}px</span>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Radius</Label>
+                          <span className="text-[10px] font-medium text-foreground/60 font-mono tabular-nums">{cornerRadius}px</span>
+                        </div>
+                        <div className="px-1">
+                          <Slider min={0} max={32} value={[cornerRadius]} onValueChange={(v) => setCornerRadius(Array.isArray(v) ? v[0] : v)} />
+                        </div>
                       </div>
-                      <input
-                        type="range" min={0} max={32} value={cornerRadius}
-                        onChange={(e) => setCornerRadius(Number(e.target.value))}
-                        className="rv-slider"
-                      />
-                    </div>
-                    <div className="rv-field">
-                      <div className="rv-field-header">
-                        <span className="rv-field-label">Padding</span>
-                        <span className="rv-field-value">{padding}px</span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Padding</Label>
+                          <span className="text-[10px] font-medium text-foreground/60 font-mono tabular-nums">{padding}px</span>
+                        </div>
+                        <div className="px-1">
+                          <Slider min={16} max={150} value={[padding]} onValueChange={(v) => setPadding(Array.isArray(v) ? v[0] : v)} />
+                        </div>
                       </div>
-                      <input
-                        type="range" min={16} max={150} value={padding}
-                        onChange={(e) => setPadding(Number(e.target.value))}
-                        className="rv-slider"
-                      />
-                    </div>
-                    <div className="rv-field">
-                      <div className="rv-field-header">
-                        <span className="rv-field-label">Shadow</span>
-                        <span className="rv-field-value">
-                          {shadowBlur === 0 ? 'None' : `${shadowBlur}px`}
-                        </span>
+                      <div className="flex flex-col gap-1.5">
+                        <div className="flex items-center justify-between px-1">
+                          <Label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Shadow</Label>
+                          <span className="text-[10px] font-medium text-foreground/60 font-mono tabular-nums">{shadowBlur === 0 ? 'None' : `${shadowBlur}px`}</span>
+                        </div>
+                        <div className="px-1">
+                          <Slider min={0} max={40} value={[shadowBlur]} onValueChange={(v) => setShadowBlur(Array.isArray(v) ? v[0] : v)} />
+                        </div>
                       </div>
-                      <input
-                        type="range" min={0} max={40} value={shadowBlur}
-                        onChange={(e) => setShadowBlur(Number(e.target.value))}
-                        className="rv-slider"
-                      />
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* ── Effects tab ───────────────────────────────────── */}
             {sideTab === 'effects' && (
-              <div className="rv-panel">
-                <div className="rv-section-header">
-                  <Sparkles size={9} />
-                  <span>Effects</span>
-                </div>
-                <div className="rv-section-body">
-                  <div className="rv-option-row">
-                    <div className="rv-option-info">
-                      <Film size={12} className="rv-option-icon" />
-                      <div className="rv-option-text">
-                        <span className="rv-option-name">Auto-Zoom</span>
-                        <span className="rv-option-desc">Follow cursor clicks</span>
+              <div className="flex flex-col">
+                <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Effects</div>
+                <div className="mx-3 bg-secondary/30 rounded-md overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <Film size={12} className="text-muted-foreground" />
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-[11px] font-medium text-foreground">Auto-Zoom</span>
+                        <span className="text-[9px] text-muted-foreground">Follow cursor clicks</span>
                       </div>
                     </div>
-                    <label className="rv-toggle">
-                      <input
-                        type="checkbox"
-                        checked={autoZoom}
-                        onChange={(e) => setAutoZoom(e.target.checked)}
-                      />
-                      <span className="rv-toggle-track" />
-                    </label>
+                    <Switch checked={autoZoom} onCheckedChange={setAutoZoom} />
                   </div>
                 </div>
               </div>
             )}
-
-            {/* ── Export tab ────────────────────────────────────── */}
-            {sideTab === 'export' && (
-              <div className="rv-panel">
-                <div className="rv-section-header">
-                  <Download size={9} />
-                  <span>Export</span>
-                </div>
-                <div className="rv-panel-footer">
-                  {done ? (
-                    <>
-                      <button className="rv-btn rv-btn--primary" onClick={handleOpen}>
-                        <FolderOpen size={14} />
-                        <span>Show in Folder</span>
-                      </button>
-                      <button className="rv-btn rv-btn--secondary" onClick={handleReExport}>
-                        <RotateCcw size={14} />
-                        <span>Re-export</span>
-                      </button>
-                      <button
-                        className="rv-btn rv-btn--secondary"
-                        onClick={() => onNavigate('home')}
-                      >
-                        Done
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <button
-                        className="rv-btn rv-btn--primary"
-                        onClick={handleExport}
-                        disabled={processing}
-                      >
-                        {processing ? (
-                          <>
-                            <Loader2 size={14} className="spinner" />
-                            <span>Exporting…</span>
-                          </>
-                        ) : (
-                          <>
-                            <Download size={14} />
-                            <span>Export</span>
-                          </>
-                        )}
-                      </button>
-                      <button
-                        className="rv-btn rv-btn--danger"
-                        onClick={handleDiscard}
-                        disabled={processing}
-                      >
-                        <span>Discard</span>
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-          </div>
+          </ScrollArea>
         </div>
       </div>
 
-      {/* ── Progress bar ────────────────────────────────────────── */}
-      {processing && (
-        <div className="rv-progress">
-          <div className="rv-progress-bar">
-            <div className="rv-progress-fill" style={{ width: `${progress}%` }}>
-              <div className="rv-progress-glow" />
-            </div>
-          </div>
-          <span className="rv-progress-label">
-            {phase || 'Processing…'} {progress}%
-          </span>
-        </div>
+      {/* Timeline — full width at bottom */}
+      {videoDuration > 0 && (
+        <VideoTrimmer
+          videoSrc={videoSrc}
+          duration={videoDuration}
+          trimStart={trimStart}
+          trimEnd={trimEnd}
+          onTrimChange={handleTrimChange}
+          currentTime={currentTime}
+          onSeek={handleSeek}
+          isPlaying={isPlaying}
+          onPlayPause={handlePlayPause}
+          onSkipBack={skipBackward}
+          onSkipForward={skipForward}
+        />
       )}
 
+      {/* Error display */}
       {error && (
-        <div className="rv-error">
+        <div className="mx-3 my-1 px-3 py-1.5 bg-destructive/10 border border-destructive/20 rounded-md text-destructive text-[11px] shrink-0">
           <p>{error}</p>
         </div>
       )}
