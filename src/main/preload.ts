@@ -56,6 +56,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // ─── Screen sources ────────────────────────────────────────────────
   getSources: () => ipcRenderer.invoke(IPC.GET_SOURCES),
 
+  // ─── Events loading ──────────────────────────────────────────────
+  loadEvents: (sessionDir: string) =>
+    ipcRenderer.invoke(IPC.LOAD_EVENTS, sessionDir),
+
   // ─── Post-processing ──────────────────────────────────────────────
   remuxVideo: (sessionDir: string) =>
     ipcRenderer.invoke(IPC.REMUX_VIDEO, sessionDir),

@@ -3,14 +3,14 @@
 import { IpcMainInvokeEvent } from 'electron';
 import fs from 'fs';
 import path from 'path';
-import { RAW_RECORDING_FILE, CLEAN_MP4_FILE } from '../../shared/constants';
+import { RAW_RECORDING_FILE, CLEAN_MP4_FILE, EVENTS_FILE, META_FILE } from '../../shared/constants';
 import { remuxToCleanMp4 } from '../services/ffmpeg';
 import { processVideo } from '../services/export-pipeline';
 import { getSettings } from '../services/settings';
 import { getMainWindow } from '../windows/main-window';
 import { getRecordingSession } from './recording';
 import { IPC } from '../../shared/constants';
-import type { ExportOptions } from '../../shared/types';
+import type { ExportOptions, LoadedEvents } from '../../shared/types';
 
 export async function handleRemuxVideo(
   _event: IpcMainInvokeEvent,
@@ -101,4 +101,34 @@ export async function handleProcessVideo(
     mainWindow?.webContents.send(IPC.PROCESSING_ERROR, { error: err.message });
     throw err;
   }
+}
+
+export async function handleLoadEvents(
+  _event: IpcMainInvokeEvent,
+  sessionDir: string,
+): Promise<LoadedEvents> {
+  const eventsPath = path.join(sessionDir, EVENTS_FILE);
+  const metaPath = path.join(sessionDir, META_FILE);
+
+  let events: any[] = [];
+  if (fs.existsSync(eventsPath)) {
+    try {
+      const raw = fs.readFileSync(eventsPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) events = parsed;
+    } catch (err) {
+      console.warn(`[Events] Failed to parse ${eventsPath}:`, err);
+    }
+  }
+
+  let meta: any = null;
+  if (fs.existsSync(metaPath)) {
+    try {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    } catch (err) {
+      console.warn(`[Events] Failed to parse ${metaPath}:`, err);
+    }
+  }
+
+  return { events, meta };
 }

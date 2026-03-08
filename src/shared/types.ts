@@ -158,3 +158,20 @@ export interface WindowBounds {
   width: number;
   height: number;
 }
+
+// ─── Zoom Segments (for timeline visualization) ──────────────────────────
+
+export interface ZoomSegment {
+  startTime: number;
+  endTime: number;
+  peakTime: number;
+  clickX: number;
+  clickY: number;
+}
+
+// ─── Events + Meta loading result ────────────────────────────────────────
+
+export interface LoadedEvents {
+  events: InputEvent[];
+  meta: RecordingMeta | null;
+}

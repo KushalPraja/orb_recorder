@@ -1,10 +1,11 @@
-// Export pipeline — orchestrates trim → zoom → background → finalize.
+// Export pipeline — orchestrates trim → background → zoom → finalize.
+// Background is applied first so the zoom crops into the composed canvas
+// (background zooms with the video, Screen Studio style).
 
 import fs from 'fs';
 import path from 'path';
 import {
   EVENTS_FILE,
-  RAW_RECORDING_FILE,
   CLEAN_MP4_FILE,
   OUTPUT_FILE,
   META_FILE,
@@ -16,16 +17,26 @@ import {
   trimVideo,
   muxAudioInto,
   getBestH264Encoder,
+  probeVideo,
 } from './ffmpeg';
-import { platform } from '../platform';
-import { fromBin, fromRoot, isPackaged } from '../paths';
-import type { ExportProgress } from '../../shared/types';
+import type { ExportProgress, InputEvent } from '../../shared/types';
+
+// Zoom engine (pure TS, no DOM deps — works in Node)
+import { SmoothCamera } from '../../renderer/lib/zoom-engine/spring';
+import {
+  splitEvents,
+  debounceClicks,
+  toCanvasCoords,
+  parseMeta,
+  CursorInterpolator,
+  scheduleCamera,
+} from '../../renderer/lib/zoom-engine/events';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function safeUnlink(filePath: string): void {
-  if (!filePath || !fs.existsSync(filePath)) return;
-  try { fs.unlinkSync(filePath); } catch { /* */ }
+function safeUnlink(p: string): void {
+  if (!p || !fs.existsSync(p)) return;
+  try { fs.unlinkSync(p); } catch { /* */ }
 }
 
 function validNum(n: number | undefined, fallback: number): number {
@@ -33,166 +44,239 @@ function validNum(n: number | undefined, fallback: number): number {
   return Number.isFinite(v) && v > 0 ? v : fallback;
 }
 
-// ─── Processor binary resolution ──────────────────────────────────────────────
-
-export function getProcessorBinaryPath(): string | null {
-  const exeName = platform.executableName('screen_processor');
-  const binPath = fromBin(exeName);
-  if (fs.existsSync(binPath)) return binPath;
-
-  // Also check extraResource path for packaged builds
-  if (isPackaged() && process.resourcesPath) {
-    const packagedBin = path.join(process.resourcesPath, 'bin', exeName);
-    if (fs.existsSync(packagedBin)) return packagedBin;
-  }
-
-  return null;
+function qualityFlags(encoder: string): string[] {
+  if (encoder === 'h264_nvenc') return ['-rc', 'vbr', '-cq', '18', '-preset', 'p4'];
+  if (['h264_amf', 'h264_videotoolbox', 'hevc_nvenc'].includes(encoder))
+    return ['-qp', '18'];
+  return ['-crf', '18', '-preset', 'medium'];
 }
 
-function getScriptPath(): string | null {
-  if (isPackaged()) {
-    if (process.resourcesPath) {
-      const packagedPath = path.join(process.resourcesPath, 'scripts', 'process.py');
-      if (fs.existsSync(packagedPath)) return packagedPath;
-    }
-    return null;
-  }
+// ─── Pipe-based zoom processor ──────────────────────────────────────────────
+// Decodes video to raw frames via FFmpeg, applies per-frame crop in Node.js
+// using the TypeScript spring engine, and pipes cropped frames back to FFmpeg
+// for encoding. This mirrors the Python pipeline's approach exactly.
 
-  const devPath = fromRoot('scripts', 'process.py');
-  if (fs.existsSync(devPath)) return devPath;
-  return null;
-}
-
-function getPythonPath(): string {
-  return process.platform === 'win32' ? 'python' : 'python3';
-}
-
-// ─── Python/binary auto-zoom processor ────────────────────────────────────────
-
-interface PythonProcessorOptions {
-  zoom?: number;
-  hold?: number;
-  encoder?: string;
+interface ZoomOpts {
+  zoom: number;
+  hold: number;
+  encoder: string;
+  fps: number;
+  padding: number; // padding that was already applied by background step
+  originalW: number; // video dimensions before background was applied
+  originalH: number;
   onProgress?: (pct: number) => void;
-  withBackground?: boolean;
-  padding?: number;
-  cornerRadius?: number;
-  shadowBlur?: number;
-  backgroundType?: string;
-  backgroundColor?: string;
-  gradientStart?: string;
-  gradientEnd?: string;
-  wallpaperPath?: string | null;
-  imageBlur?: string;
 }
 
-function runPythonProcessor(
+async function runZoomProcessor(
   inputPath: string,
   eventsPath: string,
   metaPath: string,
   outputPath: string,
-  opts: PythonProcessorOptions = {},
+  opts: ZoomOpts,
 ): Promise<string> {
-  const {
-    zoom = 2.0,
-    hold = 1.5,
-    encoder = 'libx264',
-    onProgress,
-    withBackground = false,
-    padding = 48,
-    cornerRadius = 12,
-    shadowBlur = 0,
-    backgroundType = 'solid',
-    backgroundColor = '#6366f1',
-    gradientStart = '#667eea',
-    gradientEnd = '#764ba2',
-    wallpaperPath = null,
-    imageBlur = 'none',
-  } = opts;
-
+  const { spawn } = require('child_process') as typeof import('child_process');
   const ffmpegBin = getFfmpegPath();
-  const processorBinPath = getProcessorBinaryPath();
-  const scriptPath = processorBinPath ? null : getScriptPath();
-  const pythonBin = processorBinPath ? null : getPythonPath();
 
-  if (!processorBinPath && !scriptPath) {
-    return Promise.reject(
-      new Error('Auto-zoom processor not found (checked binary and script).'),
-    );
+  // ── Load events + meta ────────────────────────────────────────────
+  let rawEvents: InputEvent[] = [];
+  if (fs.existsSync(eventsPath)) {
+    try {
+      const d = JSON.parse(fs.readFileSync(eventsPath, 'utf-8'));
+      if (Array.isArray(d)) rawEvents = d;
+    } catch { /* */ }
   }
 
-  const metaArgs = metaPath && fs.existsSync(metaPath)
-    ? ['--meta', metaPath] : [];
-  const encoderArgs = ['--encoder', encoder];
+  let metaData: any = null;
+  if (metaPath && fs.existsSync(metaPath)) {
+    try { metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* */ }
+  }
 
-  const bgArgs = withBackground
-    ? [
-        '--background',
-        '--padding', String(padding),
-        '--corner-radius', String(cornerRadius),
-        ...(shadowBlur > 0 ? ['--shadow-blur', String(shadowBlur)] : []),
-        '--bg-type', backgroundType,
-        '--bg-color', backgroundColor,
-        '--gradient-start', gradientStart,
-        '--gradient-end', gradientEnd,
-        '--image-blur', imageBlur,
-        ...(wallpaperPath ? ['--wallpaper', wallpaperPath] : []),
-      ]
-    : [];
+  // ── Probe video ───────────────────────────────────────────────────
+  // Input may already include background (padding/corners/shadow).
+  // Its dimensions are the full canvas; opts.originalW/H are the raw video.
+  const info = await probeVideo(inputPath);
+  const canvasW = info.width;
+  const canvasH = info.height;
+  const fps = info.fps > 0 && info.fps <= 240 ? info.fps : opts.fps;
+  const totalFrames = info.nbFrames > 0 ? info.nbFrames : Math.ceil(info.duration * fps);
 
-  const command = processorBinPath || pythonBin!;
-  const args = processorBinPath
-    ? [
-        inputPath, eventsPath, outputPath,
-        '--zoom', String(zoom), '--hold', String(hold),
-        '--ffmpeg', ffmpegBin, ...encoderArgs, ...metaArgs, ...bgArgs,
-      ]
-    : [
-        scriptPath!, inputPath, eventsPath, outputPath,
-        '--zoom', String(zoom), '--hold', String(hold),
-        '--ffmpeg', ffmpegBin, ...encoderArgs, ...metaArgs, ...bgArgs,
-      ];
+  // Output is same size as input canvas
+  const outW = canvasW + (canvasW % 2);
+  const outH = canvasH + (canvasH % 2);
 
-  return new Promise((resolve, reject) => {
-    const { spawn } = require('child_process');
-    const proc = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-    let stderr = '';
+  // ── Map events to canvas space (with padding offset) ───────────
+  // Events are in screen coords → map to canvas coords where video
+  // sits at (padding, padding) inside the canvas.
+  const pad = opts.padding;
+  const mi = parseMeta(metaData, opts.originalW);
+  const { clicks, scrolls, moves } = splitEvents(rawEvents);
+  const dc = debounceClicks(clicks, 0.4);
 
-    proc.stdout.on('data', (chunk: Buffer) => {
-      for (const line of chunk.toString().split('\n')) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('PROGRESS:') && onProgress) {
-          const pct = parseInt(trimmed.slice(9), 10);
-          if (Number.isFinite(pct)) onProgress(pct);
+  const clicksC  = toCanvasCoords(dc,      mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+  const scrollsC = toCanvasCoords(scrolls,  mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+  const movesC   = toCanvasCoords(moves,    mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+
+  const cursor = new CursorInterpolator(movesC);
+  const camera = new SmoothCamera(outW, outH, fps);
+
+  console.log(
+    `[ZoomEngine] canvas ${canvasW}x${canvasH} (video ${opts.originalW}x${opts.originalH}, pad=${pad}) @ ${fps}fps, ~${totalFrames} frames`
+  );
+  console.log(
+    `[ZoomEngine] ${clicksC.length} clicks, ${scrollsC.length} scrolls, ${movesC.length} moves`
+  );
+
+  // ── FFmpeg decoder (video → raw RGB24 on stdout) ──────────────────
+  const decoder = spawn(ffmpegBin, [
+    '-i', inputPath,
+    '-f', 'rawvideo', '-pix_fmt', 'rgb24',
+    '-v', 'error',
+    '-',
+  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+
+  // ── FFmpeg encoder (raw RGB24 on stdin → H.264 file) ──────────────
+  const encoder_proc = spawn(ffmpegBin, [
+    '-y',
+    '-f', 'rawvideo', '-pix_fmt', 'rgb24',
+    '-s', `${outW}x${outH}`,
+    '-r', String(fps),
+    '-i', '-',
+    '-c:v', opts.encoder, ...qualityFlags(opts.encoder),
+    '-pix_fmt', 'yuv420p',
+    '-movflags', '+faststart',
+    '-an',
+    outputPath,
+  ], { stdio: ['pipe', 'ignore', 'pipe'] });
+
+  // Pipe stderr for debugging
+  let encStderr = '';
+  encoder_proc.stderr.on('data', (c: Buffer) => { encStderr += c.toString(); });
+  decoder.stderr.on('data', (c: Buffer) => {
+    const t = c.toString().trim();
+    if (t) console.log(`[ZoomEngine/dec] ${t}`);
+  });
+
+  // ── Frame-by-frame processing (zoom crop on composed canvas) ─────
+  return new Promise<string>((resolve, reject) => {
+    const srcFrameSize = canvasW * canvasH * 3;  // RGB24 of full canvas
+    let buf = Buffer.alloc(0);
+    let frameIdx = 0;
+    let lastPct = -1;
+
+    decoder.stdout.on('data', (chunk: Buffer) => {
+      buf = Buffer.concat([buf, chunk]);
+
+      while (buf.length >= srcFrameSize) {
+        const srcFrame = buf.subarray(0, srcFrameSize);
+        buf = buf.subarray(srcFrameSize);
+
+        // ── Spring physics for this frame ───────────────────────
+        const t = frameIdx / fps;
+        scheduleCamera(camera, clicksC, scrollsC, cursor, t, opts.zoom, opts.hold);
+        camera.update();
+        const crop = camera.getCrop();
+
+        // ── Crop + scale to output size ─────────────────────────
+        const cx = Math.max(0, Math.min(outW - 1, Math.round(crop.x)));
+        const cy = Math.max(0, Math.min(outH - 1, Math.round(crop.y)));
+        const cw = Math.max(1, Math.min(outW - cx, Math.round(crop.w)));
+        const ch = Math.max(1, Math.min(outH - cy, Math.round(crop.h)));
+
+        let finalFrame: Buffer;
+
+        if (cw === outW && ch === outH && cx === 0 && cy === 0) {
+          // No crop needed (zoom = 1x), pass through
+          finalFrame = srcFrame;
+        } else {
+          // Crop then scale with bilinear interpolation
+          finalFrame = cropAndScale(srcFrame, canvasW, canvasH, cx, cy, cw, ch, outW, outH);
+        }
+
+        // Write to encoder
+        try {
+          encoder_proc.stdin.write(finalFrame);
+        } catch {
+          break;
+        }
+
+        // Progress
+        frameIdx++;
+        if (totalFrames > 0) {
+          const pct = Math.min(100, Math.round((frameIdx / totalFrames) * 100));
+          if (pct !== lastPct) {
+            lastPct = pct;
+            opts.onProgress?.(pct);
+          }
         }
       }
     });
 
-    proc.stderr.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      stderr += text;
-      for (const line of text.split('\n')) {
-        if (line.trim()) console.log(`[Python] ${line.trim()}`);
-      }
+    decoder.stdout.on('end', () => {
+      encoder_proc.stdin.end();
     });
 
-    proc.on('close', (code: number) => {
-      if (code === 0) resolve(outputPath);
-      else reject(new Error(`Python processor exited ${code}\n${stderr.slice(-500)}`));
-    });
+    decoder.on('error', (err: Error) => reject(err));
 
-    proc.on('error', (err: NodeJS.ErrnoException) => {
-      if (err.code === 'ENOENT') {
-        reject(new Error(
-          processorBinPath
-            ? `Bundled processor not found ("${command}").`
-            : `Python not found ("${pythonBin}"). Install Python 3 and run: pip install opencv-python numpy`,
-        ));
+    encoder_proc.on('close', (code: number) => {
+      if (code === 0) {
+        console.log(`[ZoomEngine] Done \u2192 ${outputPath} (${frameIdx} frames)`);
+        resolve(outputPath);
       } else {
-        reject(err);
+        reject(new Error(`FFmpeg encoder exited ${code}\n${encStderr.slice(-500)}`));
       }
     });
+
+    encoder_proc.on('error', (err: Error) => reject(err));
   });
+}
+
+/**
+ * Crop a region from an RGB24 buffer and scale it to target dimensions
+ * using bilinear interpolation. Pure JS — no native deps.
+ */
+function cropAndScale(
+  src: Buffer, srcW: number, _srcH: number,
+  cx: number, cy: number, cw: number, ch: number,
+  dstW: number, dstH: number,
+): Buffer {
+  const dst = Buffer.alloc(dstW * dstH * 3);
+  const scaleX = cw / dstW;
+  const scaleY = ch / dstH;
+
+  for (let dy = 0; dy < dstH; dy++) {
+    const srcYf = cy + dy * scaleY;
+    const sy0 = Math.floor(srcYf);
+    const sy1 = Math.min(sy0 + 1, cy + ch - 1);
+    const fy = srcYf - sy0;
+
+    for (let dx = 0; dx < dstW; dx++) {
+      const srcXf = cx + dx * scaleX;
+      const sx0 = Math.floor(srcXf);
+      const sx1 = Math.min(sx0 + 1, cx + cw - 1);
+      const fx = srcXf - sx0;
+
+      const i00 = (sy0 * srcW + sx0) * 3;
+      const i10 = (sy0 * srcW + sx1) * 3;
+      const i01 = (sy1 * srcW + sx0) * 3;
+      const i11 = (sy1 * srcW + sx1) * 3;
+
+      const dstOff = (dy * dstW + dx) * 3;
+
+      for (let c = 0; c < 3; c++) {
+        const v00 = src[i00 + c];
+        const v10 = src[i10 + c];
+        const v01 = src[i01 + c];
+        const v11 = src[i11 + c];
+
+        // Bilinear interpolation
+        const top = v00 + (v10 - v00) * fx;
+        const bot = v01 + (v11 - v01) * fx;
+        dst[dstOff + c] = Math.round(top + (bot - top) * fy);
+      }
+    }
+  }
+
+  return dst;
 }
 
 // ─── Main export entry ───────────────────────────────────────────────────────
@@ -201,14 +285,10 @@ export interface ProcessVideoOptions {
   recordingDir: string;
   outputPath?: string;
   onProgress?: (progress: ExportProgress) => void;
-
-  // Auto-zoom
   autoZoom?: boolean;
   zoomFactor?: number;
   zoomDuration?: number;
   fps?: number;
-
-  // Visual
   background?: boolean;
   cornerRadius?: number;
   padding?: number;
@@ -219,8 +299,6 @@ export interface ProcessVideoOptions {
   gradientEnd?: string;
   wallpaperPath?: string | null;
   imageBlur?: 'none' | 'moderate' | 'strong';
-
-  // Trim
   trimStart?: number;
   trimEnd?: number;
 }
@@ -248,46 +326,35 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     trimEnd,
   } = opts;
 
-  const inputPath = path.join(recordingDir, RAW_RECORDING_FILE);
   const eventsPath = path.join(recordingDir, EVENTS_FILE);
-  const metaPath = path.join(recordingDir, META_FILE);
-  const outPath = outputPath ?? path.join(recordingDir, OUTPUT_FILE);
+  const metaPath   = path.join(recordingDir, META_FILE);
+  const outPath    = outputPath ?? path.join(recordingDir, OUTPUT_FILE);
 
-  if (!fs.existsSync(inputPath)) {
-    throw new Error(`Recording not found: ${inputPath}`);
+  const previewPath = path.join(recordingDir, CLEAN_MP4_FILE);
+  if (!fs.existsSync(previewPath)) {
+    throw new Error(`preview.mp4 not found at ${previewPath}. Open the recording in the editor first.`);
   }
 
   const targetFps = validNum(fps, DEFAULT_SETTINGS.fps);
   const encoder = await getBestH264Encoder();
-
-  // ── Phase 1: Locate preview MP4 ──────────────────────────────────
-  const previewPath = path.join(recordingDir, CLEAN_MP4_FILE);
   const intermediates: string[] = [];
 
-  if (!fs.existsSync(previewPath)) {
-    throw new Error(
-      `preview.mp4 not found at ${previewPath}. Open the recording in the editor first.`,
-    );
-  }
-
-  if (onProgress) onProgress({ percent: 0, phase: 'Loading recording…' });
+  if (onProgress) onProgress({ percent: 0, phase: 'Loading recording\u2026' });
   let currentInput = previewPath;
 
-  // ── Phase 1.5: Trim ──────────────────────────────────────────────
+  // ── Trim ──────────────────────────────────────────────────────────
   const isTrimmed = Number.isFinite(trimStart) && Number.isFinite(trimEnd)
-    && trimStart! < trimEnd!
-    && (trimStart! > 0.1 || trimEnd! < Infinity);
+    && trimStart! < trimEnd! && (trimStart! > 0.1 || trimEnd! < Infinity);
 
   if (isTrimmed) {
     const trimmedPath = path.join(recordingDir, '__intermediate_trimmed.mp4');
     intermediates.push(trimmedPath);
-    if (onProgress) onProgress({ percent: 0, phase: 'Trimming…' });
+    if (onProgress) onProgress({ percent: 0, phase: 'Trimming\u2026' });
 
     try {
       await trimVideo(currentInput, trimmedPath, trimStart!, trimEnd!, (p) => {
-        if (onProgress && Number.isFinite(p.percent)) {
-          onProgress({ percent: Math.min(15, Math.round(p.percent * 0.15)), phase: 'Trimming…' });
-        }
+        if (onProgress && Number.isFinite(p.percent))
+          onProgress({ percent: Math.min(15, Math.round(p.percent * 0.15)), phase: 'Trimming\u2026' });
       });
       currentInput = trimmedPath;
     } catch (err) {
@@ -296,37 +363,67 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     }
   }
 
-  // ── Phase 2: Auto-zoom ───────────────────────────────────────────
-  if (autoZoom) {
-    const zoomOut = path.join(recordingDir, '__intermediate_zoom.mp4');
-    intermediates.push(zoomOut);
-    const audioSourceBeforePython = currentInput;
-
-    const phaseLabel = background ? 'Applying zoom + background…' : 'Applying auto-zoom…';
-    if (onProgress) onProgress({ percent: 15, phase: phaseLabel });
+  // ── Background / visual effects (padding, corners, shadow) ──────
+  // Applied BEFORE zoom so the background is part of the canvas that
+  // gets zoomed — Screen Studio style where background zooms with video.
+  if (background) {
+    const visualOut = path.join(recordingDir, '__intermediate_visual.mp4');
+    intermediates.push(visualOut);
+    const bgPhase = 'Applying background\u2026';
+    if (onProgress) onProgress({ percent: 15, phase: bgPhase });
 
     try {
-      await runPythonProcessor(currentInput, eventsPath, metaPath, zoomOut, {
+      await applyVisualExport(currentInput, visualOut, {
+        cornerRadius, padding, shadowBlur, backgroundType,
+        backgroundColor, gradientStart, gradientEnd,
+        wallpaperPath, imageBlur,
+      }, (p) => {
+        if (onProgress && Number.isFinite(p.percent)) {
+          const weight = autoZoom ? 0.4 : 0.8;
+          onProgress({ percent: Math.min(95, 15 + Math.round(p.percent * weight)), phase: bgPhase });
+        }
+      }, encoder);
+      currentInput = visualOut;
+    } catch (err) {
+      intermediates.forEach(safeUnlink);
+      throw err;
+    }
+  }
+
+  // ── Auto-zoom (TS zoom engine + FFmpeg pipe) ──────────────────────
+  // Runs on the composed canvas (with background if enabled), so the
+  // zoom crops into the full canvas — background zooms with the video.
+  if (autoZoom) {
+    // Probe to get original video dimensions (before background)
+    const origInfo = await probeVideo(previewPath);
+
+    const zoomOut = path.join(recordingDir, '__intermediate_zoom.mp4');
+    intermediates.push(zoomOut);
+    const audioSource = currentInput;
+    const basePercent = background ? 55 : 15;
+    if (onProgress) onProgress({ percent: basePercent, phase: 'Applying auto-zoom\u2026' });
+
+    try {
+      await runZoomProcessor(currentInput, eventsPath, metaPath, zoomOut, {
         zoom: validNum(zoomFactor, DEFAULT_SETTINGS.zoomFactor),
         hold: validNum(zoomDuration, DEFAULT_SETTINGS.zoomDuration),
         encoder,
+        fps: targetFps,
+        padding: background ? padding : 0,
+        originalW: origInfo.width,
+        originalH: origInfo.height,
         onProgress: (pct) => {
-          if (onProgress) {
-            onProgress({ percent: Math.min(95, 15 + Math.round(pct * 0.8)), phase: phaseLabel });
-          }
+          if (onProgress)
+            onProgress({ percent: Math.min(95, basePercent + Math.round(pct * (95 - basePercent) / 100)), phase: 'Applying auto-zoom\u2026' });
         },
-        withBackground: background,
-        padding, cornerRadius, shadowBlur, backgroundType,
-        backgroundColor, gradientStart, gradientEnd,
-        wallpaperPath, imageBlur,
       });
       currentInput = zoomOut;
 
-      // Python is video-only; merge audio back
+      // Merge audio back
       const zoomAudio = path.join(recordingDir, '__intermediate_zoom_audio.mp4');
       intermediates.push(zoomAudio);
       try {
-        await muxAudioInto(zoomOut, audioSourceBeforePython, zoomAudio);
+        await muxAudioInto(zoomOut, audioSource, zoomAudio);
         currentInput = zoomAudio;
       } catch (audioErr: any) {
         console.warn('[Export] Audio merge after zoom failed:', audioErr.message);
@@ -337,43 +434,14 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     }
   }
 
-  // ── Phase 3: Visual polish (only without auto-zoom) ──────────────
-  if (background && !autoZoom) {
-    const visualOut = outPath;
-    if (onProgress) onProgress({ percent: 15, phase: 'Applying background…' });
-
-    try {
-      await applyVisualExport(currentInput, visualOut, {
-        cornerRadius, padding, shadowBlur, backgroundType,
-        backgroundColor, gradientStart, gradientEnd,
-        wallpaperPath, imageBlur,
-      }, (p) => {
-        if (onProgress && Number.isFinite(p.percent)) {
-          onProgress({
-            percent: Math.min(95, 15 + Math.round((p.percent * 80) / 100)),
-            phase: 'Applying background…',
-          });
-        }
-      }, encoder);
-      currentInput = visualOut;
-    } catch (err) {
-      intermediates.forEach(safeUnlink);
-      throw err;
-    }
-  }
-
-  // ── Phase 4: Finalize ────────────────────────────────────────────
+  // ── Finalize ──────────────────────────────────────────────────────
   if (currentInput !== outPath) {
-    try {
-      fs.copyFileSync(currentInput, outPath);
-    } catch (err) {
-      intermediates.forEach(safeUnlink);
-      throw err;
-    }
+    try { fs.copyFileSync(currentInput, outPath); }
+    catch (err) { intermediates.forEach(safeUnlink); throw err; }
   }
 
   intermediates.forEach(safeUnlink);
   if (onProgress) onProgress({ percent: 100, phase: 'Done' });
-  console.log(`[Export] Done → ${outPath}`);
+  console.log(`[Export] Done \u2192 ${outPath}`);
   return outPath;
 }

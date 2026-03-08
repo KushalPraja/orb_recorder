@@ -5,6 +5,7 @@ import type {
   ExportProgress,
   AppSettings,
   InputEvent,
+  LoadedEvents,
 } from '../../shared/types';
 
 export interface ElectronAPI {
@@ -32,6 +33,9 @@ export interface ElectronAPI {
 
   // Sources
   getSources(): Promise<CaptureSource[]>;
+
+  // Events loading
+  loadEvents(sessionDir: string): Promise<LoadedEvents>;
 
   // Post-processing
   remuxVideo(sessionDir: string): Promise<string>;

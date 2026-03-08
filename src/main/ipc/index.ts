@@ -58,6 +58,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(IPC.REMUX_VIDEO, exportHandlers.handleRemuxVideo);
   ipcMain.handle(IPC.PROCESS_VIDEO, exportHandlers.handleProcessVideo);
 
+  // ── Events loading ──────────────────────────────────────────
+  ipcMain.handle(IPC.LOAD_EVENTS, exportHandlers.handleLoadEvents);
+
   // ── Settings ──────────────────────────────────────────────────
   ipcMain.handle(IPC.GET_SETTINGS, settingsHandlers.handleGetSettings);
   ipcMain.handle(IPC.SET_SETTINGS, settingsHandlers.handleSetSettings);

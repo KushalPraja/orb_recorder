@@ -71,6 +71,9 @@ export const IPC = {
   GET_SETTINGS: 'settings:get',
   SET_SETTINGS: 'settings:set',
 
+  // Events loading
+  LOAD_EVENTS: 'events:load',
+
   // Dialogs & shell
   PICK_OUTPUT_DIR: 'dialog:pickOutputDir',
   OPEN_OUTPUT: 'shell:openOutput',
