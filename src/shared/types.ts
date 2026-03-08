@@ -96,12 +96,15 @@ export type OverlayPosition =
   | 'bottom-center' | 'bottom-left' | 'bottom-right'
   | 'top-center'    | 'top-left'    | 'top-right';
 
+export type ThemeName = 'dark' | 'light' | 'onedark' | 'gruvbox' | 'everforest';
+
 export interface AppSettings {
   fps: number;
   zoomFactor: number;
   zoomDuration: number;
   outputDir: string;
   overlayPosition: OverlayPosition;
+  theme?: ThemeName;
 }
 
 // ─── Export Options ──────────────────────────────────────────────────────────

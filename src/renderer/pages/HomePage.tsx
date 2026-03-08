@@ -10,13 +10,15 @@ import {
   Check,
   ChevronRight,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
 import type { RecordingInfo } from '../../shared/types';
 import type { NavigateFunction } from '../types';
-import './HomePage.css';
 
 const api = window.electronAPI;
-
-/* ─── Helpers ─────────────────────────────────────────────────────── */
 
 function formatDate(timestamp: number): string {
   const d = new Date(timestamp);
@@ -25,7 +27,6 @@ function formatDate(timestamp: number): string {
   const mins = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-
   if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
   if (hours < 24) return `${hours}h ago`;
@@ -34,10 +35,9 @@ function formatDate(timestamp: number): string {
 }
 
 function formatSize(bytes: number | undefined): string {
-  if (!bytes) return '\u2014';
+  if (!bytes) return '-';
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
-  if (bytes < 1024 * 1024 * 1024)
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
@@ -47,8 +47,6 @@ function formatDuration(seconds: number | null | undefined): string {
   const s = Math.floor(seconds % 60);
   return `${m}:${String(s).padStart(2, '0')}`;
 }
-
-/* ─── Inline Rename Input ─────────────────────────────────────────── */
 
 interface InlineRenameProps {
   value: string;
@@ -70,19 +68,17 @@ function InlineRename({ value, onSave, onCancel }: InlineRenameProps) {
     else onCancel();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') commit();
-    if (e.key === 'Escape') onCancel();
-  };
-
   return (
-    <div className="hp-rename-wrap" onClick={(e) => e.stopPropagation()}>
-      <input
+    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+      <Input
         ref={inputRef}
-        className="hp-rename-input"
+        className="h-7 text-xs font-medium rounded-md"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') commit();
+          if (e.key === 'Escape') onCancel();
+        }}
         onBlur={commit}
         maxLength={120}
         autoFocus
@@ -90,10 +86,6 @@ function InlineRename({ value, onSave, onCancel }: InlineRenameProps) {
     </div>
   );
 }
-
-/* ═══════════════════════════════════════════════════════════════════
-   ProjectCard — single recording in the list
-   ═══════════════════════════════════════════════════════════════════ */
 
 interface ProjectCardProps {
   rec: RecordingInfo;
@@ -122,9 +114,14 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }: ProjectCardProps) {
   };
 
   return (
-    <div className="hp-card" onClick={() => !renaming && onOpen(rec)}>
-      {/* Left: icon + info */}
-      <div className="hp-card-body">
+    <div
+      className="group flex items-center gap-3 mx-2 px-3 py-2.5 rounded-md cursor-pointer transition-colors duration-100 hover:bg-secondary/50 active:bg-secondary/70"
+      onClick={() => !renaming && onOpen(rec)}
+    >
+      <div className="w-8 h-8 rounded-md bg-secondary/70 flex items-center justify-center shrink-0">
+        <Video size={14} className="text-muted-foreground" />
+      </div>
+      <div className="flex-1 min-w-0 flex flex-col gap-0.5">
         {renaming ? (
           <InlineRename
             value={rec.name}
@@ -132,64 +129,69 @@ function ProjectCard({ rec, onOpen, onDelete, onRename }: ProjectCardProps) {
             onCancel={() => setRenaming(false)}
           />
         ) : (
-          <span className="hp-card-name">{rec.name || 'Untitled'}</span>
+          <span className="text-[13px] font-medium text-foreground truncate">
+            {rec.name || 'Untitled'}
+          </span>
         )}
-        <div className="hp-card-meta">
-          <span className="hp-meta-item">
+        <div className="flex items-center gap-2.5">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <Clock size={10} />
             {formatDate(rec.timestamp)}
           </span>
           {rec.duration && (
-            <span className="hp-meta-item">{formatDuration(rec.duration)}</span>
+            <span className="text-[11px] text-muted-foreground font-mono tabular-nums">
+              {formatDuration(rec.duration)}
+            </span>
           )}
-          <span className="hp-meta-item">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <HardDrive size={10} />
             {formatSize(rec.size)}
           </span>
         </div>
       </div>
 
-      {/* Right: actions */}
-      <div className="hp-card-actions" onClick={(e) => e.stopPropagation()}>
-        <button
-          className="hp-action-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            setRenaming(true);
-          }}
+      <div
+        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-100"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          className="rounded-md"
+          onClick={(e) => { e.stopPropagation(); setRenaming(true); }}
           title="Rename"
         >
           <Pencil size={12} />
-        </button>
+        </Button>
         {rec.outputPath && (
-          <button
-            className="hp-action-btn"
-            onClick={(e) => {
-              e.stopPropagation();
-              api.openOutput(rec.outputPath!);
-            }}
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            className="rounded-md"
+            onClick={(e) => { e.stopPropagation(); api.openOutput(rec.outputPath!); }}
             title="Show in folder"
           >
             <FolderOpen size={12} />
-          </button>
+          </Button>
         )}
-        <button
-          className={`hp-action-btn ${confirmDelete ? 'hp-action-btn--danger-active' : 'hp-action-btn--danger'}`}
+        <Button
+          variant={confirmDelete ? 'destructive' : 'ghost'}
+          size="icon-xs"
+          className="rounded-md"
           onClick={handleDeleteClick}
           title={confirmDelete ? 'Click again to confirm' : 'Delete'}
         >
           {confirmDelete ? <Check size={12} /> : <Trash2 size={12} />}
-        </button>
+        </Button>
       </div>
 
-      <ChevronRight size={14} className="hp-card-chevron" />
+      <ChevronRight
+        size={13}
+        className="shrink-0 text-muted-foreground/30 opacity-0 group-hover:opacity-100 transition-opacity"
+      />
     </div>
   );
 }
-
-/* ═══════════════════════════════════════════════════════════════════
-   HomePage — projects list
-   ═══════════════════════════════════════════════════════════════════ */
 
 interface HomePageProps {
   onNavigate: NavigateFunction;
@@ -212,9 +214,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
     }
   }, []);
 
-  useEffect(() => {
-    loadRecordings();
-  }, [loadRecordings]);
+  useEffect(() => { loadRecordings(); }, [loadRecordings]);
 
   const handleDelete = async (sessionDir: string) => {
     try {
@@ -229,9 +229,7 @@ export function HomePage({ onNavigate }: HomePageProps) {
     try {
       const saved = await api.renameRecording(sessionDir, newName);
       setRecordings((prev) =>
-        prev.map((r) =>
-          r.sessionDir === sessionDir ? { ...r, name: saved } : r,
-        ),
+        prev.map((r) => r.sessionDir === sessionDir ? { ...r, name: saved } : r),
       );
     } catch (err) {
       console.error('Failed to rename recording:', err);
@@ -249,52 +247,52 @@ export function HomePage({ onNavigate }: HomePageProps) {
   };
 
   return (
-    <div className="home-page">
-      {/* ── Header ──────────────────────────────────────────────── */}
-      <div className="hp-header">
-        <div className="hp-header-left">
-          <h2>Projects</h2>
-          <span className="hp-count">{recordings.length}</span>
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold text-foreground">Projects</h2>
+          <Badge variant="secondary" className="text-[10px] font-mono rounded-full px-1.5 py-0">
+            {recordings.length}
+          </Badge>
         </div>
-        <button className="hp-new-btn" onClick={() => onNavigate('record')}>
-          <Plus size={14} />
-          <span>New Recording</span>
-        </button>
+        <Button size="sm" className="rounded-md gap-1.5" onClick={() => onNavigate('record')}>
+          <Plus size={13} />
+          New Recording
+        </Button>
       </div>
 
-      {/* ── List ────────────────────────────────────────────────── */}
-      <div className="hp-list">
-        {loading ? (
-          <div className="hp-empty">
-            <span className="hp-empty-text">Loading\u2026</span>
-          </div>
-        ) : recordings.length === 0 ? (
-          <div className="hp-empty">
-            <Video size={28} strokeWidth={1.5} className="hp-empty-icon" />
-            <span className="hp-empty-title">No projects yet</span>
-            <span className="hp-empty-text">
-              Create a new recording to get started
-            </span>
-            <button
-              className="hp-new-btn hp-new-btn--ghost"
-              onClick={() => onNavigate('record')}
-            >
-              <Plus size={14} />
-              <span>New Recording</span>
-            </button>
-          </div>
-        ) : (
-          recordings.map((rec) => (
-            <ProjectCard
-              key={rec.sessionDir}
-              rec={rec}
-              onOpen={handleOpenProject}
-              onDelete={handleDelete}
-              onRename={handleRename}
-            />
-          ))
-        )}
-      </div>
+      <ScrollArea className="flex-1">
+        <div className="py-0.5">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2">
+              <span className="text-sm text-muted-foreground">Loading...</span>
+            </div>
+          ) : recordings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 gap-2.5">
+              <div className="w-10 h-10 rounded-lg bg-secondary/60 flex items-center justify-center">
+                <Video size={18} strokeWidth={1.5} className="text-muted-foreground" />
+              </div>
+              <span className="text-sm text-muted-foreground">
+                No projects yet
+              </span>
+              <Button variant="outline" size="sm" className="rounded-md gap-1.5" onClick={() => onNavigate('record')}>
+                <Plus size={13} />
+                New Recording
+              </Button>
+            </div>
+          ) : (
+            recordings.map((rec) => (
+              <ProjectCard
+                key={rec.sessionDir}
+                rec={rec}
+                onOpen={handleOpenProject}
+                onDelete={handleDelete}
+                onRename={handleRename}
+              />
+            ))
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 }
