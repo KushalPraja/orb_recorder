@@ -55,7 +55,8 @@ export class ZoomEngine {
   readonly segments: ZoomSegment[];
 
   constructor(config: ZoomEngineConfig, rawEvents: InputEvent[]) {
-    this.config = config;
+    // Cap zoom factor to prevent excessive zoom that causes nausea
+    this.config = { ...config, zoomFactor: Math.min(config.zoomFactor, 2.5) };
     this.checkpoints = new Map();
     this.lastComputedFrame = -1;
 

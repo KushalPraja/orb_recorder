@@ -53,7 +53,7 @@ export async function getBestH264Encoder(): Promise<string> {
           await new Promise<void>((resolve, reject) => {
             const testProc = spawn(ffmpeg, [
               '-hide_banner', '-loglevel', 'error',
-              '-f', 'lavfi', '-i', 'color=black:s=16x16',
+              '-f', 'lavfi', '-i', 'color=black:s=128x128',
               '-t', '0.1', '-c:v', encoder, '-f', 'null', process.platform === 'win32' ? 'NUL' : '/dev/null',
             ]);
             testProc.on('close', (code) => {

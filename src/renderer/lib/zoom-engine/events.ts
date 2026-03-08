@@ -208,23 +208,43 @@ export function scheduleCamera(
 
   if (activeClick !== null) {
     // ── Zoomed in ─────────────────────────────────────────────────
-    camera.setZoom(zoomFactor);
 
-    const SNAP_SETTLE = 0.25; // fast snap to click position
-    const FOLLOW_BLEND = 0.5; // after this, fully following cursor
+    // Gradual zoom ramp: ease into zoom over first 0.3s to avoid jarring punch-in
+    const ZOOM_RAMP = 0.3;
+    const zoomEase = Math.min(1, clickAge / ZOOM_RAMP);
+    // Smooth ease-out curve for gentle zoom entry
+    const easedZoom = 1 + (zoomFactor - 1) * (1 - (1 - zoomEase) * (1 - zoomEase));
+    camera.setZoom(easedZoom);
+
+    const SNAP_SETTLE = 0.35; // slightly longer snap settle for gentler arrival
+    const FOLLOW_BLEND = 0.7; // longer blend for smoother transition to cursor follow
+
+    // Dead zone radius: don't chase cursor if it's very close to current target
+    const DEAD_ZONE = 25; // px — ignore micro-movements
 
     if (clickAge < SNAP_SETTLE) {
-      // Phase 1: Quick snap to the click location
+      // Phase 1: Gentle snap to the click location
       camera.setTarget(activeClick.x, activeClick.y, 'snap');
     } else {
-      // Phase 2: Follow the cursor smoothly — this is the key Screen Studio feel
+      // Phase 2: Follow the cursor smoothly — the Screen Studio feel
       const pos = cursor.at(t);
       if (pos) {
-        // Blend from click position to cursor position over FOLLOW_BLEND seconds
-        const blendT = Math.min(1, (clickAge - SNAP_SETTLE) / FOLLOW_BLEND);
-        const x = activeClick.x + (pos.x - activeClick.x) * blendT;
-        const y = activeClick.y + (pos.y - activeClick.y) * blendT;
-        camera.setTarget(x, y, 'follow');
+        // Smooth ease-in-out blend curve
+        const rawBlend = Math.min(1, (clickAge - SNAP_SETTLE) / FOLLOW_BLEND);
+        const blendT = rawBlend * rawBlend * (3 - 2 * rawBlend); // smoothstep
+
+        const rawX = activeClick.x + (pos.x - activeClick.x) * blendT;
+        const rawY = activeClick.y + (pos.y - activeClick.y) * blendT;
+
+        // Apply dead zone: only update target if cursor moved significantly
+        const dx = rawX - camera.targetX;
+        const dy = rawY - camera.targetY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist > DEAD_ZONE) {
+          camera.setTarget(rawX, rawY, 'follow');
+        }
+        // else: keep current target — prevents micro-wobble from tiny cursor jitter
       } else {
         camera.setTarget(activeClick.x, activeClick.y, 'follow');
       }
@@ -240,14 +260,15 @@ export function scheduleCamera(
 
   // ── Scroll offset ────────────────────────────────────────────────
   // Scrolls nudge the camera vertically while zoomed, fading over time
+  // Reduced strength and longer duration for less jarring scroll nudges
   for (const scroll of scrolls) {
     const st = scroll.timestamp;
-    const dur = 0.5;
+    const dur = 0.7; // longer fade for smoother feel
     if (st <= t && t <= st + dur) {
       const progress = (t - st) / dur;
       const ease = progress * progress * (3 - 2 * progress); // smoothstep
-      const strength = activeClick ? 1.0 : 0.3; // stronger effect when zoomed
-      const offset = (scroll.rotation ?? 0) * 45 * strength * (1 - ease);
+      const strength = activeClick ? 0.6 : 0.15; // reduced strength to avoid nausea
+      const offset = (scroll.rotation ?? 0) * 30 * strength * (1 - ease);
       camera.targetY = Math.max(0, Math.min(camera.canvasH, camera.targetY + offset));
     }
   }

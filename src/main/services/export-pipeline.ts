@@ -12,12 +12,12 @@ import {
   DEFAULT_SETTINGS,
 } from '../../shared/constants';
 import {
-  getFfmpegPath,
   applyVisualExport,
   trimVideo,
   muxAudioInto,
   getBestH264Encoder,
   probeVideo,
+  spawnFfmpeg,
 } from './ffmpeg';
 import type { ExportProgress, InputEvent } from '../../shared/types';
 
@@ -51,21 +51,114 @@ function qualityFlags(encoder: string): string[] {
   return ['-crf', '18', '-preset', 'medium'];
 }
 
-// ─── Pipe-based zoom processor ──────────────────────────────────────────────
-// Decodes video to raw frames via FFmpeg, applies per-frame crop in Node.js
-// using the TypeScript spring engine, and pipes cropped frames back to FFmpeg
-// for encoding. This mirrors the Python pipeline's approach exactly.
+// ─── Crop trajectory types ────────────────────────────────────────────────
+
+interface CropRect { x: number; y: number; w: number; h: number }
 
 interface ZoomOpts {
   zoom: number;
   hold: number;
   encoder: string;
   fps: number;
-  padding: number; // padding that was already applied by background step
-  originalW: number; // video dimensions before background was applied
+  padding: number;
+  originalW: number;
   originalH: number;
   onProgress?: (pct: number) => void;
 }
+
+// ─── Step 1: Pre-compute crop trajectory ──────────────────────────────────
+
+function precomputeCropTrajectory(
+  clicksC: InputEvent[],
+  scrollsC: InputEvent[],
+  cursor: CursorInterpolator,
+  camera: SmoothCamera,
+  fps: number,
+  totalFrames: number,
+  zoom: number,
+  hold: number,
+  outW: number,
+  outH: number,
+): { crops: CropRect[]; allPassthrough: boolean } {
+  const crops: CropRect[] = [];
+  let allPassthrough = true;
+
+  for (let i = 0; i < totalFrames; i++) {
+    const t = i / fps;
+    scheduleCamera(camera, clicksC as any, scrollsC as any, cursor, t, zoom, hold);
+    camera.update();
+    const raw = camera.getCrop();
+
+    const x = Math.max(0, Math.min(outW - 1, Math.round(raw.x)));
+    const y = Math.max(0, Math.min(outH - 1, Math.round(raw.y)));
+    const w = Math.max(1, Math.min(outW - x, Math.round(raw.w)));
+    const h = Math.max(1, Math.min(outH - y, Math.round(raw.h)));
+
+    crops.push({ x, y, w, h });
+
+    if (allPassthrough && !(x === 0 && y === 0 && w === outW && h === outH)) {
+      allPassthrough = false;
+    }
+  }
+
+  return { crops, allPassthrough };
+}
+
+// ─── Step 2: Generate FFmpeg zoompan expression ──────────────────────────
+// Converts pre-computed crops to per-frame exact zoompan values using a binary
+// search if-tree. Every frame gets its exact spring-physics value — no keyframe
+// reduction or linear interpolation, so zoom transitions are perfectly smooth.
+
+interface ZoompanFrame { z: number; x: number; y: number }
+
+function cropsToZoompan(crops: CropRect[], outW: number): ZoompanFrame[] {
+  return crops.map(c => {
+    const z = outW / Math.max(1, c.w);
+    return {
+      z: Math.round(z * 10000) / 10000,
+      x: Math.round(c.x * z * 100) / 100,
+      y: Math.round(c.y * z * 100) / 100,
+    };
+  });
+}
+
+/**
+ * Build a binary-search if() tree that maps frame number `on` to exact values.
+ * Depth is O(log n) — ~10 levels for 1000 frames. No interpolation.
+ */
+function buildExactIfTree(vals: { frame: number; val: number }[], lo: number, hi: number): string {
+  if (lo === hi) return String(vals[lo].val);
+  if (hi - lo === 1) {
+    return `if(lt(on,${vals[hi].frame}),${vals[lo].val},${vals[hi].val})`;
+  }
+  const mid = (lo + hi) >>> 1;
+  return `if(lt(on,${vals[mid].frame}),${buildExactIfTree(vals, lo, mid - 1)},${buildExactIfTree(vals, mid, hi)})`;
+}
+
+/**
+ * Deduplicate consecutive identical values to shrink the expression, then build
+ * the binary tree. This preserves exact values at every transition point while
+ * collapsing runs of identical frames into single entries.
+ */
+function buildExpression(zpFrames: ZoompanFrame[], key: 'z' | 'x' | 'y'): string {
+  // Deduplicate: keep only frames where the value changes
+  const entries: { frame: number; val: number }[] = [];
+  let prev: number | null = null;
+  for (let i = 0; i < zpFrames.length; i++) {
+    const val = zpFrames[i][key];
+    if (val !== prev) {
+      entries.push({ frame: i, val });
+      prev = val;
+    }
+  }
+  if (entries.length === 0) return '1';
+  if (entries.length === 1) return String(entries[0].val);
+  return buildExactIfTree(entries, 0, entries.length - 1);
+}
+
+// ─── FFmpeg zoompan zoom processor ───────────────────────────────────────
+// Single FFmpeg command with zoompan filter — SIMD-optimized, no Node.js
+// in the pixel path. Uses -filter_script:v to avoid ENAMETOOLONG on Windows.
 
 async function runZoomProcessor(
   inputPath: string,
@@ -74,10 +167,7 @@ async function runZoomProcessor(
   outputPath: string,
   opts: ZoomOpts,
 ): Promise<string> {
-  const { spawn } = require('child_process') as typeof import('child_process');
-  const ffmpegBin = getFfmpegPath();
-
-  // ── Load events + meta ────────────────────────────────────────────
+  // ── Load events + meta ──────────────────────────────────────────
   let rawEvents: InputEvent[] = [];
   if (fs.existsSync(eventsPath)) {
     try {
@@ -91,30 +181,24 @@ async function runZoomProcessor(
     try { metaData = JSON.parse(fs.readFileSync(metaPath, 'utf-8')); } catch { /* */ }
   }
 
-  // ── Probe video ───────────────────────────────────────────────────
-  // Input may already include background (padding/corners/shadow).
-  // Its dimensions are the full canvas; opts.originalW/H are the raw video.
+  // ── Probe video ─────────────────────────────────────────────────
   const info = await probeVideo(inputPath);
   const canvasW = info.width;
   const canvasH = info.height;
   const fps = info.fps > 0 && info.fps <= 240 ? info.fps : opts.fps;
   const totalFrames = info.nbFrames > 0 ? info.nbFrames : Math.ceil(info.duration * fps);
-
-  // Output is same size as input canvas
   const outW = canvasW + (canvasW % 2);
   const outH = canvasH + (canvasH % 2);
 
-  // ── Map events to canvas space (with padding offset) ───────────
-  // Events are in screen coords → map to canvas coords where video
-  // sits at (padding, padding) inside the canvas.
+  // ── Map events to canvas space ──────────────────────────────────
   const pad = opts.padding;
   const mi = parseMeta(metaData, opts.originalW);
   const { clicks, scrolls, moves } = splitEvents(rawEvents);
   const dc = debounceClicks(clicks, 0.4);
 
-  const clicksC  = toCanvasCoords(dc,      mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
-  const scrollsC = toCanvasCoords(scrolls,  mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
-  const movesC   = toCanvasCoords(moves,    mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+  const clicksC  = toCanvasCoords(dc,     mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+  const scrollsC = toCanvasCoords(scrolls, mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
+  const movesC   = toCanvasCoords(moves,   mi.originX, mi.originY, mi.scaleFactor, pad, opts.originalW, opts.originalH);
 
   const cursor = new CursorInterpolator(movesC);
   const camera = new SmoothCamera(outW, outH, fps);
@@ -126,157 +210,57 @@ async function runZoomProcessor(
     `[ZoomEngine] ${clicksC.length} clicks, ${scrollsC.length} scrolls, ${movesC.length} moves`
   );
 
-  // ── FFmpeg decoder (video → raw RGB24 on stdout) ──────────────────
-  const decoder = spawn(ffmpegBin, [
-    '-i', inputPath,
-    '-f', 'rawvideo', '-pix_fmt', 'rgb24',
-    '-v', 'error',
-    '-',
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // ── Pre-compute crop trajectory ─────────────────────────────────
+  const t0 = Date.now();
+  const { crops, allPassthrough } = precomputeCropTrajectory(
+    clicksC, scrollsC, cursor, camera, fps, totalFrames,
+    opts.zoom, opts.hold, outW, outH,
+  );
+  console.log(`[ZoomEngine] Pre-computed ${crops.length} crop rects in ${Date.now() - t0}ms`);
 
-  // ── FFmpeg encoder (raw RGB24 on stdin → H.264 file) ──────────────
-  const encoder_proc = spawn(ffmpegBin, [
+  if (allPassthrough) {
+    console.log('[ZoomEngine] All frames are passthrough (no zoom) -- skipping');
+    return inputPath;
+  }
+
+  // ── Generate per-frame zoompan expressions ──────────────────────
+  const zpFrames = cropsToZoompan(crops, outW);
+  const exprZ = buildExpression(zpFrames, 'z');
+  const exprX = buildExpression(zpFrames, 'x');
+  const exprY = buildExpression(zpFrames, 'y');
+
+  console.log(`[ZoomEngine] zoompan expression lengths: z=${exprZ.length}, x=${exprX.length}, y=${exprY.length}`);
+
+  const { app } = require('electron');
+  const tempDir = app.getPath('temp');
+  const scriptFile = path.join(tempDir, `orb_zoom_filter_${Date.now()}.txt`);
+
+  const vfFilter = `zoompan=z='${exprZ}':x='${exprX}':y='${exprY}':d=1:s=${outW}x${outH}:fps=${fps}`;
+  fs.writeFileSync(scriptFile, vfFilter, 'utf-8');
+
+  const args = [
     '-y',
-    '-f', 'rawvideo', '-pix_fmt', 'rgb24',
-    '-s', `${outW}x${outH}`,
-    '-r', String(fps),
-    '-i', '-',
+    '-i', inputPath,
+    '-filter_script:v', scriptFile,
     '-c:v', opts.encoder, ...qualityFlags(opts.encoder),
     '-pix_fmt', 'yuv420p',
+    '-r', String(fps),
     '-movflags', '+faststart',
     '-an',
     outputPath,
-  ], { stdio: ['pipe', 'ignore', 'pipe'] });
+  ];
 
-  // Pipe stderr for debugging
-  let encStderr = '';
-  encoder_proc.stderr.on('data', (c: Buffer) => { encStderr += c.toString(); });
-  decoder.stderr.on('data', (c: Buffer) => {
-    const t = c.toString().trim();
-    if (t) console.log(`[ZoomEngine/dec] ${t}`);
-  });
+  const { promise } = spawnFfmpeg(args, (p) => {
+    opts.onProgress?.(p.percent);
+  }, info.duration);
 
-  // ── Frame-by-frame processing (zoom crop on composed canvas) ─────
-  return new Promise<string>((resolve, reject) => {
-    const srcFrameSize = canvasW * canvasH * 3;  // RGB24 of full canvas
-    let buf = Buffer.alloc(0);
-    let frameIdx = 0;
-    let lastPct = -1;
-
-    decoder.stdout.on('data', (chunk: Buffer) => {
-      buf = Buffer.concat([buf, chunk]);
-
-      while (buf.length >= srcFrameSize) {
-        const srcFrame = buf.subarray(0, srcFrameSize);
-        buf = buf.subarray(srcFrameSize);
-
-        // ── Spring physics for this frame ───────────────────────
-        const t = frameIdx / fps;
-        scheduleCamera(camera, clicksC, scrollsC, cursor, t, opts.zoom, opts.hold);
-        camera.update();
-        const crop = camera.getCrop();
-
-        // ── Crop + scale to output size ─────────────────────────
-        const cx = Math.max(0, Math.min(outW - 1, Math.round(crop.x)));
-        const cy = Math.max(0, Math.min(outH - 1, Math.round(crop.y)));
-        const cw = Math.max(1, Math.min(outW - cx, Math.round(crop.w)));
-        const ch = Math.max(1, Math.min(outH - cy, Math.round(crop.h)));
-
-        let finalFrame: Buffer;
-
-        if (cw === outW && ch === outH && cx === 0 && cy === 0) {
-          // No crop needed (zoom = 1x), pass through
-          finalFrame = srcFrame;
-        } else {
-          // Crop then scale with bilinear interpolation
-          finalFrame = cropAndScale(srcFrame, canvasW, canvasH, cx, cy, cw, ch, outW, outH);
-        }
-
-        // Write to encoder
-        try {
-          encoder_proc.stdin.write(finalFrame);
-        } catch {
-          break;
-        }
-
-        // Progress
-        frameIdx++;
-        if (totalFrames > 0) {
-          const pct = Math.min(100, Math.round((frameIdx / totalFrames) * 100));
-          if (pct !== lastPct) {
-            lastPct = pct;
-            opts.onProgress?.(pct);
-          }
-        }
-      }
-    });
-
-    decoder.stdout.on('end', () => {
-      encoder_proc.stdin.end();
-    });
-
-    decoder.on('error', (err: Error) => reject(err));
-
-    encoder_proc.on('close', (code: number) => {
-      if (code === 0) {
-        console.log(`[ZoomEngine] Done \u2192 ${outputPath} (${frameIdx} frames)`);
-        resolve(outputPath);
-      } else {
-        reject(new Error(`FFmpeg encoder exited ${code}\n${encStderr.slice(-500)}`));
-      }
-    });
-
-    encoder_proc.on('error', (err: Error) => reject(err));
-  });
-}
-
-/**
- * Crop a region from an RGB24 buffer and scale it to target dimensions
- * using bilinear interpolation. Pure JS — no native deps.
- */
-function cropAndScale(
-  src: Buffer, srcW: number, _srcH: number,
-  cx: number, cy: number, cw: number, ch: number,
-  dstW: number, dstH: number,
-): Buffer {
-  const dst = Buffer.alloc(dstW * dstH * 3);
-  const scaleX = cw / dstW;
-  const scaleY = ch / dstH;
-
-  for (let dy = 0; dy < dstH; dy++) {
-    const srcYf = cy + dy * scaleY;
-    const sy0 = Math.floor(srcYf);
-    const sy1 = Math.min(sy0 + 1, cy + ch - 1);
-    const fy = srcYf - sy0;
-
-    for (let dx = 0; dx < dstW; dx++) {
-      const srcXf = cx + dx * scaleX;
-      const sx0 = Math.floor(srcXf);
-      const sx1 = Math.min(sx0 + 1, cx + cw - 1);
-      const fx = srcXf - sx0;
-
-      const i00 = (sy0 * srcW + sx0) * 3;
-      const i10 = (sy0 * srcW + sx1) * 3;
-      const i01 = (sy1 * srcW + sx0) * 3;
-      const i11 = (sy1 * srcW + sx1) * 3;
-
-      const dstOff = (dy * dstW + dx) * 3;
-
-      for (let c = 0; c < 3; c++) {
-        const v00 = src[i00 + c];
-        const v10 = src[i10 + c];
-        const v01 = src[i01 + c];
-        const v11 = src[i11 + c];
-
-        // Bilinear interpolation
-        const top = v00 + (v10 - v00) * fx;
-        const bot = v01 + (v11 - v01) * fx;
-        dst[dstOff + c] = Math.round(top + (bot - top) * fy);
-      }
-    }
+  try {
+    await promise;
+    console.log(`[ZoomEngine] Done -> ${outputPath} (${totalFrames} frames)`);
+    return outputPath;
+  } finally {
+    safeUnlink(scriptFile);
   }
-
-  return dst;
 }
 
 // ─── Main export entry ───────────────────────────────────────────────────────
@@ -364,8 +348,6 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
   }
 
   // ── Background / visual effects (padding, corners, shadow) ──────
-  // Applied BEFORE zoom so the background is part of the canvas that
-  // gets zoomed — Screen Studio style where background zooms with video.
   if (background) {
     const visualOut = path.join(recordingDir, '__intermediate_visual.mp4');
     intermediates.push(visualOut);
@@ -390,11 +372,8 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     }
   }
 
-  // ── Auto-zoom (TS zoom engine + FFmpeg pipe) ──────────────────────
-  // Runs on the composed canvas (with background if enabled), so the
-  // zoom crops into the full canvas — background zooms with the video.
+  // ── Auto-zoom (FFmpeg zoompan — fast, native SIMD) ────────────────
   if (autoZoom) {
-    // Probe to get original video dimensions (before background)
     const origInfo = await probeVideo(previewPath);
 
     const zoomOut = path.join(recordingDir, '__intermediate_zoom.mp4');
@@ -405,7 +384,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
 
     try {
       await runZoomProcessor(currentInput, eventsPath, metaPath, zoomOut, {
-        zoom: validNum(zoomFactor, DEFAULT_SETTINGS.zoomFactor),
+        zoom: Math.min(validNum(zoomFactor, DEFAULT_SETTINGS.zoomFactor), 2.5),
         hold: validNum(zoomDuration, DEFAULT_SETTINGS.zoomDuration),
         encoder,
         fps: targetFps,
@@ -442,6 +421,6 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
 
   intermediates.forEach(safeUnlink);
   if (onProgress) onProgress({ percent: 100, phase: 'Done' });
-  console.log(`[Export] Done \u2192 ${outPath}`);
+  console.log(`[Export] Done -> ${outPath}`);
   return outPath;
 }

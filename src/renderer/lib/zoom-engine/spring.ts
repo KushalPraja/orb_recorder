@@ -5,15 +5,19 @@
 // All coordinates are in canvas space (recording + padding).
 
 // ─── Tuning presets (ω values) ─────────────────────────────────────────────
-// Tuned for Screen-Studio-style feel:
-//   - Snap is fast but not jarring
-//   - Follow is smooth and cinematic (the "pan" feel)
-//   - Recenter is lazy so zoom-out feels natural
-//   - Zoom spring is brisk but not instant
-export const OMEGA_SNAP = 12.0;       // click-snap: quick arrival ~140ms
-export const OMEGA_FOLLOW = 4.5;      // cursor-follow: smooth pan ~450ms
-export const OMEGA_RECENTER = 3.0;    // zoom-out drift: lazy ~700ms
-export const OMEGA_ZOOM = 7.0;        // zoom level change: ~250ms
+// Tuned for buttery-smooth Screen-Studio / Cursor-style feel:
+//   - Snap is gentle — arrives without jarring overshoot
+//   - Follow is very smooth and cinematic (lazy pan)
+//   - Recenter is slow so zoom-out feels natural, never abrupt
+//   - Zoom spring is gentle to avoid nausea from rapid zoom changes
+export const OMEGA_SNAP = 7.0;        // click-snap: gentle arrival ~220ms
+export const OMEGA_FOLLOW = 3.0;      // cursor-follow: lazy smooth pan ~650ms
+export const OMEGA_RECENTER = 2.2;    // zoom-out drift: very lazy ~900ms
+export const OMEGA_ZOOM = 3.5;        // zoom level change: slow ~550ms
+
+// Maximum spring velocity to prevent overshooting and wobble
+const MAX_POS_VEL = 3000;   // px/s cap for position springs
+const MAX_ZOOM_VEL = 3.0;   // zoom units/s cap
 
 // ─── Spring1D ──────────────────────────────────────────────────────────────
 
@@ -27,10 +31,16 @@ export class Spring1D {
   }
 
   /** Advance one time-step with semi-implicit Euler (critical damping ζ=1). */
-  step(target: number, omega: number, dt: number): void {
+  step(target: number, omega: number, dt: number, maxVel?: number): void {
     const diff = this.pos - target;
     const accel = -2.0 * omega * this.vel - omega * omega * diff;
     this.vel += accel * dt;
+
+    // Clamp velocity to prevent overshoot and wobble
+    if (maxVel !== undefined && maxVel > 0) {
+      this.vel = Math.max(-maxVel, Math.min(maxVel, this.vel));
+    }
+
     this.pos += this.vel * dt;
   }
 
@@ -100,14 +110,24 @@ export class SmoothCamera {
   update(): void {
     const dt = 1 / Math.max(1, this.fps);
 
-    this._sx.step(this.targetX, this._posOmega, dt);
-    this._sy.step(this.targetY, this._posOmega, dt);
-    this._sz.step(this._targetZ, OMEGA_ZOOM, dt);
+    this._sx.step(this.targetX, this._posOmega, dt, MAX_POS_VEL);
+    this._sy.step(this.targetY, this._posOmega, dt, MAX_POS_VEL);
+    this._sz.step(this._targetZ, OMEGA_ZOOM, dt, MAX_ZOOM_VEL);
 
-    // Snap zoom to 1.0 when essentially there
-    if (Math.abs(this._sz.pos - 1) < 0.005 && Math.abs(this._sz.vel) < 0.05) {
+    // Snap zoom to 1.0 when essentially there (wider threshold to avoid micro-oscillation)
+    if (Math.abs(this._sz.pos - 1) < 0.01 && Math.abs(this._sz.vel) < 0.1) {
       this._sz.pos = 1;
       this._sz.vel = 0;
+    }
+
+    // Snap position when very close to target (prevents lingering wobble)
+    if (Math.abs(this._sx.pos - this.targetX) < 0.5 && Math.abs(this._sx.vel) < 1) {
+      this._sx.pos = this.targetX;
+      this._sx.vel = 0;
+    }
+    if (Math.abs(this._sy.pos - this.targetY) < 0.5 && Math.abs(this._sy.vel) < 1) {
+      this._sy.pos = this.targetY;
+      this._sy.vel = 0;
     }
 
     // Clamp zoom floor
