@@ -577,8 +577,9 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
     gradientEnd: gradient.end,
     wallpaperFile: bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
     imageBlur: bgType === 'image' ? imageBlur : 'none',
+    isPlaying,
   }), [videoSrc, loadedEvents, loadedMeta, videoW, videoH, autoZoom, bgEnabled, padding,
-    cornerRadius, shadowBlur, bgType, bgColor, gradient, wallpaperIdx, imageBlur]);
+    cornerRadius, shadowBlur, bgType, bgColor, gradient, wallpaperIdx, imageBlur, isPlaying]);
 
   if (!data) {
     return (
