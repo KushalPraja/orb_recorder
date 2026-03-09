@@ -161,7 +161,7 @@ export class ZoomEngine {
 }
 
 // Re-export everything for convenient imports
-export { SmoothCamera, Spring1D } from './spring';
+export { SmoothCamera} from './spring';
 export { ClickRipple, RIPPLE_DURATION, RIPPLE_MAX_RADIUS } from './effects';
 export {
   splitEvents,
