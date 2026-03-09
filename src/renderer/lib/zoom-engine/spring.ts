@@ -11,7 +11,7 @@ export const SPEED_SNAP = 0.06;       // click snap: ~0.8s arrival
 export const SPEED_FOLLOW = 0.025;    // cursor follow: ~2s lazy pan
 export const SPEED_RECENTER = 0.024;  // drift to center: ~2s (matches zoom-out)
 export const SPEED_ZOOM_IN = 0.045;   // zoom in: ~1s
-export const SPEED_ZOOM_OUT = 0.025;  // zoom out: ~2s (was 5s — way too slow)
+export const SPEED_ZOOM_OUT = 0.045;  // zoom out: ~2s (was 5s — way too slow)
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
@@ -22,18 +22,6 @@ function smoothLerp(current: number, target: number, speed: number, dt: number):
   return current + (target - current) * t;
 }
 
-// ─── Spring1D (minimal stub for backward compat) ─────────────────────────
-
-export class Spring1D {
-  pos: number;
-  vel: number;
-  constructor(pos = 0, _vel = 0) { this.pos = pos; this.vel = 0; }
-  step(target: number, _omega: number, dt: number): void {
-    this.pos = smoothLerp(this.pos, target, 0.06, dt);
-  }
-  snap(value: number): void { this.pos = value; this.vel = 0; }
-  clone(): Spring1D { return new Spring1D(this.pos); }
-}
 
 // ─── SmoothCamera ──────────────────────────────────────────────────────────
 
@@ -97,10 +85,6 @@ export class SmoothCamera {
     const zoomSpeed = this._targetZoom > this._zoom ? SPEED_ZOOM_IN : SPEED_ZOOM_OUT;
     this._zoom = smoothLerp(this._zoom, this._targetZoom, zoomSpeed, dt);
 
-    // Snap to target when close enough that the difference is sub-pixel.
-    // Without this, exponential lerp asymptotically approaches forever,
-    // creating micro-jitter in the FFmpeg export (values like 1.00019, 1.00017...).
-    // At 1920px, zoom delta of 0.003 = ~0.3px crop change = invisible.
     if (Math.abs(this._zoom - this._targetZoom) < 0.003) this._zoom = this._targetZoom;
     if (Math.abs(this._x - this.targetX) < 0.5) this._x = this.targetX;
     if (Math.abs(this._y - this.targetY) < 0.5) this._y = this.targetY;
