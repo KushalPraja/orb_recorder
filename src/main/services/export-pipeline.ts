@@ -31,6 +31,7 @@ import {
   CursorInterpolator,
   scheduleCamera,
 } from '../../renderer/lib/zoom-engine/events';
+import { computeZoomSegments } from '../../renderer/lib/zoom-engine/segments';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ interface ZoomOpts {
 // ─── Step 1: Pre-compute crop trajectory ──────────────────────────────────
 
 function precomputeCropTrajectory(
+  segments: import('../../renderer/lib/zoom-engine/segments').ZoomSegment[],
   clicksC: InputEvent[],
   scrollsC: InputEvent[],
   cursor: CursorInterpolator,
@@ -76,7 +78,6 @@ function precomputeCropTrajectory(
   fps: number,
   totalFrames: number,
   zoom: number,
-  hold: number,
   outW: number,
   outH: number,
 ): { crops: CropRect[]; allPassthrough: boolean } {
@@ -85,18 +86,20 @@ function precomputeCropTrajectory(
 
   for (let i = 0; i < totalFrames; i++) {
     const t = i / fps;
-    scheduleCamera(camera, clicksC as any, scrollsC as any, cursor, t, zoom, hold);
+    scheduleCamera(camera, segments, clicksC as any, scrollsC as any, cursor, t, zoom);
     camera.update();
     const raw = camera.getCrop();
 
-    const x = Math.max(0, Math.min(outW - 1, Math.round(raw.x)));
-    const y = Math.max(0, Math.min(outH - 1, Math.round(raw.y)));
-    const w = Math.max(1, Math.min(outW - x, Math.round(raw.w)));
-    const h = Math.max(1, Math.min(outH - y, Math.round(raw.h)));
+    // Keep sub-pixel precision — rounding creates stair-stepping that looks like shaking.
+    // The zoompan filter handles sub-pixel interpolation natively.
+    const x = Math.max(0, Math.min(outW - raw.w, raw.x));
+    const y = Math.max(0, Math.min(outH - raw.h, raw.y));
+    const w = Math.max(1, Math.min(outW, raw.w));
+    const h = Math.max(1, Math.min(outH, raw.h));
 
     crops.push({ x, y, w, h });
 
-    if (allPassthrough && !(x === 0 && y === 0 && w === outW && h === outH)) {
+    if (allPassthrough && !(Math.abs(x) < 0.5 && Math.abs(y) < 0.5 && Math.abs(w - outW) < 0.5 && Math.abs(h - outH) < 0.5)) {
       allPassthrough = false;
     }
   }
@@ -114,10 +117,13 @@ interface ZoompanFrame { z: number; x: number; y: number }
 function cropsToZoompan(crops: CropRect[], outW: number): ZoompanFrame[] {
   return crops.map(c => {
     const z = outW / Math.max(1, c.w);
+    // Quantize to precision zoompan can actually resolve.
+    // Too many decimal places → every frame is unique → massive expressions
+    // AND prevents near-identical values from deduplicating (= jitter).
     return {
-      z: Math.round(z * 10000) / 10000,
-      x: Math.round(c.x * z * 100) / 100,
-      y: Math.round(c.y * z * 100) / 100,
+      z: Math.round(z * 1000) / 1000,     // 0.001 precision — sub-pixel at any resolution
+      x: Math.round(c.x * z * 10) / 10,   // 0.1px precision in zoomed space
+      y: Math.round(c.y * z * 10) / 10,
     };
   });
 }
@@ -212,9 +218,10 @@ async function runZoomProcessor(
 
   // ── Pre-compute crop trajectory ─────────────────────────────────
   const t0 = Date.now();
+  const segments = computeZoomSegments(clicksC as any, opts.hold);
   const { crops, allPassthrough } = precomputeCropTrajectory(
-    clicksC, scrollsC, cursor, camera, fps, totalFrames,
-    opts.zoom, opts.hold, outW, outH,
+    segments, clicksC, scrollsC, cursor, camera, fps, totalFrames,
+    opts.zoom, outW, outH,
   );
   console.log(`[ZoomEngine] Pre-computed ${crops.length} crop rects in ${Date.now() - t0}ms`);
 

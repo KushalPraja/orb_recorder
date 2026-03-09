@@ -91,7 +91,7 @@ export class ZoomEngine {
    * Uses checkpointing for fast random access.
    */
   computeFrameState(frame: number): FrameState {
-    const { fps, zoomFactor, holdDuration, canvasW, canvasH } = this.config;
+    const { fps, zoomFactor, canvasW, canvasH } = this.config;
 
     // Find the nearest checkpoint at or before this frame
     let checkpointFrame = 0;
@@ -111,12 +111,12 @@ export class ZoomEngine {
 
       scheduleCamera(
         this.camera,
+        this.segments,
         this.clicks,
         this.scrolls,
         this.cursor,
         t,
         zoomFactor,
-        holdDuration,
       );
       this.camera.update();
 

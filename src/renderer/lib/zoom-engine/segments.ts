@@ -1,4 +1,9 @@
-// segments.ts — Compute zoom segments for timeline visualization.
+// segments.ts — Compute zoom segments for timeline and camera scheduling.
+//
+// Two-click activation: zoom only triggers when 2+ clicks land within a
+// CLUSTER_WINDOW. Once active, zoom stays as long as clicks keep coming.
+// Single isolated clicks are ignored — prevents overwhelming zoom cycling
+// and motion sickness.
 
 import type { ClickEvent } from '../../../shared/types';
 
@@ -10,37 +15,51 @@ export interface ZoomSegment {
   clickY: number;
 }
 
+/** Two clicks must land within this window to trigger a zoom session. */
+const CLUSTER_WINDOW = 3.0;
+
 /**
- * Convert debounced clicks into zoom segments for the timeline.
- * Each click creates a zoom-in window of `holdDuration` seconds.
- * Overlapping segments are merged.
+ * Group clicks into clusters where each click is within CLUSTER_WINDOW
+ * of the previous one. Only clusters with 2+ clicks become zoom segments.
+ * This avoids zooming on isolated single clicks.
  */
 export function computeZoomSegments(
   clicks: ClickEvent[],
   holdDuration: number,
 ): ZoomSegment[] {
-  if (clicks.length === 0) return [];
+  if (clicks.length < 2) return [];
 
-  const raw: ZoomSegment[] = clicks.map((c) => ({
-    startTime: c.timestamp,
-    endTime: c.timestamp + holdDuration,
-    peakTime: c.timestamp,
-    clickX: c.x,
-    clickY: c.y,
-  }));
+  const sorted = [...clicks].sort((a, b) => a.timestamp - b.timestamp);
 
-  // Merge overlapping segments
-  const merged: ZoomSegment[] = [raw[0]];
-  for (let i = 1; i < raw.length; i++) {
-    const prev = merged[merged.length - 1];
-    const curr = raw[i];
-    if (curr.startTime <= prev.endTime) {
-      // Extend the previous segment
-      prev.endTime = Math.max(prev.endTime, curr.endTime);
+  // Step 1: Group clicks into clusters (each click within CLUSTER_WINDOW of the previous)
+  const clusters: ClickEvent[][] = [];
+  let current: ClickEvent[] = [sorted[0]];
+
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].timestamp - current[current.length - 1].timestamp <= CLUSTER_WINDOW) {
+      current.push(sorted[i]);
     } else {
-      merged.push(curr);
+      clusters.push(current);
+      current = [sorted[i]];
     }
   }
+  clusters.push(current);
 
-  return merged;
+  // Step 2: Only clusters with 2+ clicks become zoom segments
+  const segments: ZoomSegment[] = [];
+  for (const cluster of clusters) {
+    if (cluster.length < 2) continue;
+
+    const first = cluster[0];
+    const last = cluster[cluster.length - 1];
+    segments.push({
+      startTime: first.timestamp,
+      endTime: last.timestamp + holdDuration,
+      peakTime: first.timestamp,
+      clickX: first.x,
+      clickY: first.y,
+    });
+  }
+
+  return segments;
 }

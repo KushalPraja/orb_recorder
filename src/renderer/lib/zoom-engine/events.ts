@@ -1,7 +1,8 @@
-// events.ts — Event processing, debouncing, coordinate mapping, interpolation,
+// events.ts — Event processing, coordinate mapping, cursor interpolation,
 // and Screen-Studio-style camera scheduling.
 
 import type { InputEvent, ClickEvent, ScrollEvent, MoveEvent } from '../../../shared/types';
+import type { ZoomSegment } from './segments';
 
 // ─── Splitting ─────────────────────────────────────────────────────────────
 
@@ -146,130 +147,101 @@ export class CursorInterpolator {
       y: a.y + (b.y - a.y) * frac,
     };
   }
-
-  /** Check if cursor is moving significantly in a time window around t. */
-  isActive(t: number, window = 0.8, threshold = 30): boolean {
-    const before = this.at(t - window * 0.5);
-    const after = this.at(t + window * 0.5);
-    if (!before || !after) return false;
-    const dx = after.x - before.x;
-    const dy = after.y - before.y;
-    return Math.sqrt(dx * dx + dy * dy) > threshold;
-  }
 }
 
 // ─── Camera scheduling (Screen Studio style) ──────────────────────────────
 //
-// Behaviour:
-//   1. Click → fast snap-zoom to click position
-//   2. While zoomed, continuously follow the cursor with gentle spring
-//   3. Stay zoomed as long as there's cursor activity or new clicks
-//   4. Zoom out smoothly after inactivity (no clicks for holdDuration AND
-//      cursor is idle for a bit)
-//   5. Scrolls add a temporary vertical offset while zoomed
+// Uses pre-computed zoom segments for smart zoom decisions:
+//   1. Zoom in when entering a segment → snap camera to click position
+//   2. While zoomed, follow cursor with lazy lerp + dead zone
+//   3. Zoom out smoothly when leaving a segment
+//   4. Anticipate upcoming segments — don't zoom out if one is close
+//   5. Scroll nudges camera vertically while zoomed
 //
-// The key difference from the old approach: the camera ALWAYS follows the
-// cursor while zoomed in, giving that smooth "Screen Studio" panning feel.
+// The key: fewer, longer zoom holds with slow transitions = Screen Studio feel.
+
+const DEAD_ZONE = 45;      // px — ignore cursor movements smaller than this (relative to actual cam position)
+const SNAP_PHASE = 0.4;    // seconds — snap to click position on new click
+const ANTICIPATION = 0.8;  // seconds — don't zoom out if next segment is this close
 
 export function scheduleCamera(
   camera: import('./spring').SmoothCamera,
+  segments: ZoomSegment[],
   clicks: ClickEvent[],
   scrolls: ScrollEvent[],
   cursor: CursorInterpolator,
   t: number,
   zoomFactor: number,
-  holdDuration: number,
 ): void {
-  // Find the most recent active click (within hold window)
-  let activeClick: ClickEvent | null = null;
-  let clickAge = 0;
+  // ── Find active segment and next upcoming segment ────────────
+  let activeSegment: ZoomSegment | null = null;
+  let nextSegment: ZoomSegment | null = null;
 
-  for (const click of clicks) {
-    const ct = click.timestamp;
-    if (ct <= t && t <= ct + holdDuration) {
-      activeClick = click;
-      clickAge = t - ct;
+  for (const seg of segments) {
+    if (t >= seg.startTime && t <= seg.endTime) {
+      activeSegment = seg;
+    } else if (seg.startTime > t && !nextSegment) {
+      nextSegment = seg;
     }
   }
 
-  // Check if cursor is still actively moving (extend zoom window)
-  const cursorActive = cursor.isActive(t, 0.6, 20);
-
-  // Find next upcoming click (for anticipation — don't zoom out if a click
-  // is about to happen within 0.3s)
-  let nextClickSoon = false;
-  for (const click of clicks) {
-    const gap = click.timestamp - t;
-    if (gap > 0 && gap < 0.3) {
-      nextClickSoon = true;
-      break;
+  // ── Find most recent click within current segment ────────────
+  let latestClick: ClickEvent | null = null;
+  if (activeSegment) {
+    for (const click of clicks) {
+      if (click.timestamp <= t && click.timestamp >= activeSegment.startTime) {
+        latestClick = click;
+      }
     }
   }
 
-  if (activeClick !== null) {
-    // ── Zoomed in ─────────────────────────────────────────────────
+  if (activeSegment) {
+    // ── Zoomed in ─────────────────────────────────────────────
+    camera.setZoom(zoomFactor);
 
-    // Gradual zoom ramp: ease into zoom over first 0.3s to avoid jarring punch-in
-    const ZOOM_RAMP = 0.3;
-    const zoomEase = Math.min(1, clickAge / ZOOM_RAMP);
-    // Smooth ease-out curve for gentle zoom entry
-    const easedZoom = 1 + (zoomFactor - 1) * (1 - (1 - zoomEase) * (1 - zoomEase));
-    camera.setZoom(easedZoom);
+    const timeSinceClick = latestClick ? t - latestClick.timestamp : Infinity;
 
-    const SNAP_SETTLE = 0.35; // slightly longer snap settle for gentler arrival
-    const FOLLOW_BLEND = 0.7; // longer blend for smoother transition to cursor follow
-
-    // Dead zone radius: don't chase cursor if it's very close to current target
-    const DEAD_ZONE = 25; // px — ignore micro-movements
-
-    if (clickAge < SNAP_SETTLE) {
-      // Phase 1: Gentle snap to the click location
-      camera.setTarget(activeClick.x, activeClick.y, 'snap');
+    if (latestClick && timeSinceClick < SNAP_PHASE) {
+      // Just clicked — move toward click position
+      camera.setTarget(latestClick.x, latestClick.y, 'snap');
     } else {
-      // Phase 2: Follow the cursor smoothly — the Screen Studio feel
+      // Follow cursor with lazy lerp + dead zone against ACTUAL camera position
       const pos = cursor.at(t);
       if (pos) {
-        // Smooth ease-in-out blend curve
-        const rawBlend = Math.min(1, (clickAge - SNAP_SETTLE) / FOLLOW_BLEND);
-        const blendT = rawBlend * rawBlend * (3 - 2 * rawBlend); // smoothstep
-
-        const rawX = activeClick.x + (pos.x - activeClick.x) * blendT;
-        const rawY = activeClick.y + (pos.y - activeClick.y) * blendT;
-
-        // Apply dead zone: only update target if cursor moved significantly
-        const dx = rawX - camera.targetX;
-        const dy = rawY - camera.targetY;
+        // Compare to actual camera position, not target — prevents dead zone oscillation
+        const dx = pos.x - camera.x;
+        const dy = pos.y - camera.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
         if (dist > DEAD_ZONE) {
-          camera.setTarget(rawX, rawY, 'follow');
+          camera.setTarget(pos.x, pos.y, 'follow');
         }
-        // else: keep current target — prevents micro-wobble from tiny cursor jitter
-      } else {
-        camera.setTarget(activeClick.x, activeClick.y, 'follow');
+      } else if (latestClick) {
+        camera.setTarget(latestClick.x, latestClick.y, 'follow');
       }
     }
-  } else if (nextClickSoon) {
-    // About to click — hold position, don't start zooming out
-    // Keep current target, just maintain
-  } else {
-    // ── No active click — zoom out ────────────────────────────────
-    camera.setTarget(camera.canvasW / 2, camera.canvasH / 2, 'recenter');
-    camera.resetZoom();
-  }
 
-  // ── Scroll offset ────────────────────────────────────────────────
-  // Scrolls nudge the camera vertically while zoomed, fading over time
-  // Reduced strength and longer duration for less jarring scroll nudges
-  for (const scroll of scrolls) {
-    const st = scroll.timestamp;
-    const dur = 0.7; // longer fade for smoother feel
-    if (st <= t && t <= st + dur) {
-      const progress = (t - st) / dur;
-      const ease = progress * progress * (3 - 2 * progress); // smoothstep
-      const strength = activeClick ? 0.6 : 0.15; // reduced strength to avoid nausea
-      const offset = (scroll.rotation ?? 0) * 30 * strength * (1 - ease);
-      camera.targetY = Math.max(0, Math.min(camera.canvasH, camera.targetY + offset));
+    // ── Scroll offset (computed once, not additive) ────────────
+    // Find the strongest active scroll and apply a single offset
+    let scrollOffset = 0;
+    for (const scroll of scrolls) {
+      const dur = 0.8;
+      if (scroll.timestamp <= t && t <= scroll.timestamp + dur) {
+        const progress = (t - scroll.timestamp) / dur;
+        const ease = progress * progress * (3 - 2 * progress);
+        const offset = (scroll.rotation ?? 0) * 12 * (1 - ease);
+        // Keep the largest magnitude offset (not cumulative)
+        if (Math.abs(offset) > Math.abs(scrollOffset)) scrollOffset = offset;
+      }
     }
+    if (scrollOffset !== 0) {
+      camera.targetY = Math.max(0, Math.min(camera.canvasH, camera.targetY + scrollOffset));
+    }
+  } else if (nextSegment && (nextSegment.startTime - t) < ANTICIPATION) {
+    // ── About to enter a segment — hold position, don't zoom out
+  } else {
+    // ── Not zoomed — drift back to center ─────────────────────
+    camera.resetZoom();
+    camera.setTarget(camera.canvasW / 2, camera.canvasH / 2, 'recenter');
   }
 }
