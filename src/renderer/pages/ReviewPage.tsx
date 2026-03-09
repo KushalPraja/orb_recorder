@@ -17,6 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { Player, type PlayerRef } from '@remotion/player';
+import type { AnyZodObject } from 'remotion';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -698,7 +699,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
         {/* Left: Remotion Player preview — renders the actual composition */}
         <div className="flex-1 min-w-0 flex items-center justify-center bg-background overflow-hidden">
           {videoSrc && videoDuration > 0 ? (
-            <Player
+            <Player<AnyZodObject, ZoomCompositionProps>
               ref={playerRef}
               component={ZoomComposition}
               inputProps={compositionProps}

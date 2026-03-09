@@ -4,8 +4,11 @@ import { HomePage } from './pages/HomePage';
 import { RecordPage } from './pages/RecordPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { ExportHostPage } from './pages/ExportHostPage';
 import { SettingsProvider, useSettings } from './contexts/SettingsContext';
 import type { Page, ReviewData, NavigateFunction } from './types';
+
+const isExportHost = new URLSearchParams(window.location.search).get('mode') === 'export-host';
 
 function ThemeApplicator() {
   const { settings } = useSettings();
@@ -50,6 +53,10 @@ function AppContent() {
 }
 
 export function App() {
+  if (isExportHost) {
+    return <ExportHostPage />;
+  }
+
   return (
     <SettingsProvider>
       <AppContent />

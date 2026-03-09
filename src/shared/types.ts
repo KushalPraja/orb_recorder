@@ -140,6 +140,35 @@ export interface ExportProgress {
   phase: string;
 }
 
+export interface ExportFileReaderHandle {
+  readerId: string;
+  size: number;
+}
+
+export interface RendererExportRequest {
+  jobId: string;
+  inputPath: string;
+  outputPath: string;
+  events: InputEvent[];
+  meta: RecordingMeta | null;
+  fps: number;
+  autoZoom: boolean;
+  zoomFactor: number;
+  zoomDuration: number;
+  background: boolean;
+  cornerRadius: number;
+  padding: number;
+  shadowBlur: number;
+  backgroundType: BackgroundType;
+  backgroundColor: string;
+  gradientStart: string;
+  gradientEnd: string;
+  wallpaperPath: string | null;
+  imageBlur: ImageBlur;
+  trimStart?: number;
+  trimEnd?: number;
+}
+
 // ─── Video Probe ─────────────────────────────────────────────────────────────
 
 export interface VideoInfo {

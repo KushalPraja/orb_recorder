@@ -12,7 +12,7 @@ import { BackgroundLayer } from './BackgroundLayer';
 import { RippleOverlay } from './RippleOverlay';
 import type { InputEvent } from '../../../shared/types';
 
-export interface ZoomCompositionProps {
+export interface ZoomCompositionProps extends Record<string, unknown> {
   videoSrc: string;
   events: InputEvent[];
   meta?: { originX?: number; originY?: number; scaleFactor?: number; captureWidth?: number } | null;

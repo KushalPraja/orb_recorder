@@ -6,6 +6,11 @@
 
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import { IPC } from '../shared/constants';
+import type {
+  ExportFileReaderHandle,
+  ExportProgress,
+  RendererExportRequest,
+} from '../shared/types';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -65,12 +70,40 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke(IPC.REMUX_VIDEO, sessionDir),
   processVideo: (opts: Record<string, unknown>) =>
     ipcRenderer.invoke(IPC.PROCESS_VIDEO, opts),
-  onProgress: (cb: (data: { percent: number; phase?: string }) => void) =>
+  onProgress: (cb: (data: ExportProgress) => void) =>
     onIpc(IPC.PROCESSING_PROGRESS, cb),
   onProcessingDone: (cb: (data: { outputPath: string }) => void) =>
     onIpc(IPC.PROCESSING_DONE, cb),
   onProcessingError: (cb: (data: { error: string }) => void) =>
     onIpc(IPC.PROCESSING_ERROR, cb),
+
+  // ─── Hidden export host ───────────────────────────────────────────
+  onExportJob: (cb: (job: RendererExportRequest) => void) =>
+    onIpc(IPC.EXPORT_HOST_START, cb),
+  notifyExportHostReady: () =>
+    ipcRenderer.send(IPC.EXPORT_HOST_READY),
+  notifyExportHostProgress: (data: { jobId: string; progress: ExportProgress }) =>
+    ipcRenderer.send(IPC.EXPORT_HOST_PROGRESS, data),
+  notifyExportHostDone: (data: { jobId: string; outputPath: string }) =>
+    ipcRenderer.send(IPC.EXPORT_HOST_DONE, data),
+  notifyExportHostError: (data: { jobId: string; error: string }) =>
+    ipcRenderer.send(IPC.EXPORT_HOST_ERROR, data),
+
+  // ─── Export file streaming ────────────────────────────────────────
+  openExportReader: (filePath: string): Promise<ExportFileReaderHandle> =>
+    ipcRenderer.invoke(IPC.EXPORT_OPEN_READER, filePath),
+  readExportRange: (readerId: string, start: number, end: number): Promise<ArrayBuffer> =>
+    ipcRenderer.invoke(IPC.EXPORT_READ_RANGE, readerId, start, end),
+  closeExportReader: (readerId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.EXPORT_CLOSE_READER, readerId),
+  openExportWriter: (filePath: string): Promise<string> =>
+    ipcRenderer.invoke(IPC.EXPORT_OPEN_WRITER, filePath),
+  writeExportChunk: (writerId: string, position: number, data: Uint8Array | ArrayBuffer): Promise<void> =>
+    ipcRenderer.invoke(IPC.EXPORT_WRITE_CHUNK, writerId, position, data),
+  closeExportWriter: (writerId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.EXPORT_CLOSE_WRITER, writerId),
+  abortExportWriter: (writerId: string): Promise<void> =>
+    ipcRenderer.invoke(IPC.EXPORT_ABORT_WRITER, writerId),
 
   // ─── Settings ──────────────────────────────────────────────────────
   getSettings: () => ipcRenderer.invoke(IPC.GET_SETTINGS),

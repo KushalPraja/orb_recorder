@@ -67,6 +67,22 @@ export const IPC = {
   PROCESSING_DONE: 'video:done',
   PROCESSING_ERROR: 'video:error',
 
+  // Hidden export host
+  EXPORT_HOST_READY: 'export-host:ready',
+  EXPORT_HOST_START: 'export-host:start',
+  EXPORT_HOST_PROGRESS: 'export-host:progress',
+  EXPORT_HOST_DONE: 'export-host:done',
+  EXPORT_HOST_ERROR: 'export-host:error',
+
+  // Export file streaming
+  EXPORT_OPEN_READER: 'export:open-reader',
+  EXPORT_READ_RANGE: 'export:read-range',
+  EXPORT_CLOSE_READER: 'export:close-reader',
+  EXPORT_OPEN_WRITER: 'export:open-writer',
+  EXPORT_WRITE_CHUNK: 'export:write-chunk',
+  EXPORT_CLOSE_WRITER: 'export:close-writer',
+  EXPORT_ABORT_WRITER: 'export:abort-writer',
+
   // Settings
   GET_SETTINGS: 'settings:get',
   SET_SETTINGS: 'settings:set',
