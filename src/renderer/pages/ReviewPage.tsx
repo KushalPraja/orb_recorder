@@ -917,7 +917,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                         <div className="flex gap-1.5 flex-wrap">
                           {GRADIENT_PRESETS.map((g, i) => (
                             <button key={i}
-                              className={cn('w-5 h-5 rounded-sm border-2 border-transparent cursor-pointer transition-all hover:scale-110', gradientIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
+                              className={cn('w-5 h-5 rounded-sm cursor-pointer transition-all hover:scale-110', gradientIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
                               style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }} title={g.name} onClick={() => setGradientIdx(i)} />
                           ))}
                         </div>
@@ -931,8 +931,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                           <div className="grid grid-cols-4 gap-1.5">
                             {WALLPAPERS.map((w, i) => (
                               <button key={i}
-                                className={cn('aspect-[16/10] bg-cover bg-center rounded-sm border-2 border-transparent cursor-pointer transition-all p-0 hover:scale-105', wallpaperIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
-                                style={{ backgroundImage: `url(./Wallpapers/${w})` }}
+                                className={cn('aspect-[16/10] bg-cover bg-center rounded-sm cursor-pointer transition-all p-0 hover:scale-105', wallpaperIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
+                                style={{ backgroundImage: `url(./Wallpapers/lowres/${w})` }}
                                 title={w.replace(/-thumb\.(jpg|jpeg)$/i, '').replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
                                 onClick={() => setWallpaperIdx(i)} />
                             ))}
@@ -977,6 +977,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                           <Slider min={0} max={40} value={[shadowBlur]} onValueChange={(v) => setShadowBlur(Array.isArray(v) ? v[0] : v)} />
                         </div>
                       </div>
+                      <div></div>
                     </div>
                   </div>
                 </div>
