@@ -54,6 +54,36 @@ function shiftEventsForTrim(
     .filter((event) => event.timestamp >= keepFrom && event.timestamp <= keepUntil);
 }
 
+function shiftCustomZoomSegmentsForTrim(
+  segments: RendererExportRequest['customZoomSegments'],
+  trimStart: number,
+  trimEnd: number | undefined,
+): RendererExportRequest['customZoomSegments'] {
+  if (!segments || segments.length === 0) return undefined;
+
+  const keepUntil = trimEnd === undefined ? Number.POSITIVE_INFINITY : trimEnd - trimStart + 1;
+
+  return segments
+    .map((segment) => ({
+      ...segment,
+      startTime: segment.startTime - trimStart,
+      endTime: segment.endTime - trimStart,
+      peakTime: segment.peakTime - trimStart,
+    }))
+    .filter((segment) => segment.endTime >= 0 && segment.startTime <= keepUntil)
+    .map((segment) => {
+      const startTime = Math.max(0, segment.startTime);
+      const endTime = Math.max(startTime, Math.min(keepUntil, segment.endTime));
+      const peakTime = Math.max(startTime, Math.min(endTime, segment.peakTime));
+      return {
+        ...segment,
+        startTime,
+        endTime,
+        peakTime,
+      };
+    });
+}
+
 async function loadWallpaperBitmap(filePath: string | null): Promise<ImageBitmap | null> {
   if (!filePath) return null;
 
@@ -130,14 +160,26 @@ export async function runWebCodecsExport(
 
     const shouldComposite = request.background || request.autoZoom;
     if (shouldComposite) {
+      const trimStartSeconds = request.trimStart ?? 0;
       const shiftedEvents = request.autoZoom
         ? shiftEventsForTrim(
             request.events,
-            request.trimStart ?? 0,
+            trimStartSeconds,
             request.trimEnd,
             request.zoomDuration,
           )
         : [];
+      const shiftedCustomSegments = request.autoZoom
+        ? shiftCustomZoomSegmentsForTrim(
+            request.customZoomSegments,
+            trimStartSeconds,
+            request.trimEnd,
+          )
+        : undefined;
+      const composerRequest: RendererExportRequest = {
+        ...request,
+        customZoomSegments: shiftedCustomSegments,
+      };
       const wallpaper = request.backgroundType === 'image'
         ? await loadWallpaperBitmap(request.wallpaperPath)
         : null;
@@ -147,7 +189,7 @@ export async function runWebCodecsExport(
         frameHeight: videoTrack.displayHeight,
         events: shiftedEvents,
         meta: request.autoZoom ? request.meta : null,
-        request,
+        request: composerRequest,
         wallpaper,
       });
     }

@@ -117,6 +117,7 @@ export interface ExportOptions {
   exportPath?: string;
   autoZoom?: boolean;
   zoomKeyframes?: ZoomKeyframe[];
+  customZoomSegments?: ZoomSegment[];
 
   // Visual
   background?: boolean;
@@ -155,6 +156,7 @@ export interface RendererExportRequest {
   autoZoom: boolean;
   zoomFactor: number;
   zoomDuration: number;
+  customZoomSegments?: ZoomSegment[];
   background: boolean;
   cornerRadius: number;
   padding: number;

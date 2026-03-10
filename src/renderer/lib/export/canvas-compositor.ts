@@ -176,6 +176,7 @@ export class CanvasExportComposer {
           holdDuration: request.zoomDuration,
           padding: this.padding,
           meta,
+          customSegments: request.customZoomSegments,
         }, events)
       : null;
   }

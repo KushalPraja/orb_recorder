@@ -98,6 +98,7 @@ export async function handleProcessVideo(
       autoZoom: !!opts.autoZoom,
       zoomFactor: settings.zoomFactor,
       zoomDuration: settings.zoomDuration,
+      customZoomSegments: opts.customZoomSegments,
 
       background: !!opts.background,
       cornerRadius: opts.cornerRadius ?? 12,

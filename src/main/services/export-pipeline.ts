@@ -17,6 +17,7 @@ import type {
   InputEvent,
   RecordingMeta,
   RendererExportRequest,
+  ZoomSegment,
 } from '../../shared/types';
 import { runRendererExport } from './renderer-export-host';
 
@@ -73,6 +74,7 @@ export interface ProcessVideoOptions {
   autoZoom?: boolean;
   zoomFactor?: number;
   zoomDuration?: number;
+  customZoomSegments?: ZoomSegment[];
   fps?: number;
   background?: boolean;
   cornerRadius?: number;
@@ -96,6 +98,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     autoZoom = false,
     zoomFactor,
     zoomDuration,
+    customZoomSegments,
     fps,
     background = false,
     cornerRadius = 12,
@@ -131,6 +134,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     autoZoom,
     zoomFactor: Math.min(validNum(zoomFactor, DEFAULT_SETTINGS.zoomFactor), 2.5),
     zoomDuration: validNum(zoomDuration, DEFAULT_SETTINGS.zoomDuration),
+    customZoomSegments,
     background,
     cornerRadius: background ? cornerRadius : 0,
     padding: background ? padding : 0,
