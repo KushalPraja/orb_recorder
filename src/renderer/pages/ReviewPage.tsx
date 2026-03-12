@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Download,
   Loader2,
@@ -16,6 +16,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { Player, type PlayerRef } from '@remotion/player';
+import type { AnyZodObject } from 'remotion';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Slider } from '@/components/ui/slider';
@@ -25,8 +27,10 @@ import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
+import { ZoomComposition, type ZoomCompositionProps } from '@/components/remotion/ZoomComposition';
+import { computeZoomSegments, debounceClicks, splitEvents } from '@/lib/zoom-engine';
 import type { NavigateFunction, ReviewData } from '../types';
-import type { ImageBlur } from '../../shared/types';
+import type { ImageBlur, InputEvent, RecordingMeta, ZoomSegment, ExportQuality } from '../../shared/types';
 
 const api = window.electronAPI;
 
@@ -73,7 +77,12 @@ function formatTimecode(seconds: number): string {
    VideoTrimmer — professional NLE-style timeline
    ═══════════════════════════════════════════════════════════════════ */
 
-type DragTarget = 'start' | 'end' | 'playhead';
+type DragTarget =
+  | { type: 'trim-start' }
+  | { type: 'trim-end' }
+  | { type: 'playhead' }
+  | { type: 'zoom-start'; index: number }
+  | { type: 'zoom-end'; index: number };
 
 interface VideoTrimmerProps {
   videoSrc: string | null;
@@ -87,6 +96,9 @@ interface VideoTrimmerProps {
   onPlayPause: () => void;
   onSkipBack: () => void;
   onSkipForward: () => void;
+  autoZoom?: boolean;
+  zoomSegments: ZoomSegment[];
+  onZoomSegmentsChange: (segs: ZoomSegment[]) => void;
 }
 
 const HANDLE_W = 10; // px width of each trim handle
@@ -94,6 +106,7 @@ const HANDLE_W = 10; // px width of each trim handle
 function VideoTrimmer({
   videoSrc, duration, trimStart, trimEnd, onTrimChange,
   currentTime, onSeek, isPlaying, onPlayPause, onSkipBack, onSkipForward,
+  autoZoom, zoomSegments, onZoomSegmentsChange,
 }: VideoTrimmerProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState<DragTarget | null>(null);
@@ -107,9 +120,9 @@ function VideoTrimmer({
     const video = document.createElement('video');
     video.src = videoSrc; video.muted = true; video.preload = 'auto';
     const canvas = document.createElement('canvas');
-    canvas.width = 160; canvas.height = 90;
+    canvas.width = 160; canvas.height = 90; // extremely low-res for speed
     const ctx = canvas.getContext('2d')!;
-    const THUMB_COUNT = 40;
+    const THUMB_COUNT = 40; // Fewer thumbnails for faster processing
     const thumbs: (string | null)[] = [];
 
     video.addEventListener('loadeddata', async () => {
@@ -134,10 +147,10 @@ function VideoTrimmer({
     return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)) * duration;
   }, [duration]);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent, type: DragTarget) => {
+  const handlePointerDown = useCallback((e: React.PointerEvent, target: DragTarget) => {
     e.preventDefault(); e.stopPropagation();
-    setDragging(type);
-    document.body.style.cursor = type === 'playhead' ? 'grabbing' : 'ew-resize';
+    setDragging(target);
+    document.body.style.cursor = target.type === 'playhead' ? 'grabbing' : 'ew-resize';
   }, []);
 
   const handleTrackClick = useCallback((e: React.MouseEvent) => {
@@ -146,20 +159,48 @@ function VideoTrimmer({
     onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
   }, [dragging, posToTime, trimStart, trimEnd, onSeek]);
 
+  const updateZoomSegmentBoundary = useCallback((
+    index: number,
+    boundary: 'start' | 'end',
+    time: number,
+  ) => {
+    const MIN_ZOOM = 0.1;
+    if (index < 0 || index >= zoomSegments.length) return;
+
+    const segs = [...zoomSegments];
+    const seg = segs[index];
+    if (!seg) return;
+
+    if (boundary === 'start') {
+      const newStart = Math.max(0, Math.min(time, seg.endTime - MIN_ZOOM));
+      const peakTime = Math.max(newStart, Math.min(seg.endTime, seg.peakTime));
+      segs[index] = { ...seg, startTime: newStart, peakTime };
+    } else {
+      const newEnd = Math.min(duration, Math.max(time, seg.startTime + MIN_ZOOM));
+      const peakTime = Math.max(seg.startTime, Math.min(newEnd, seg.peakTime));
+      segs[index] = { ...seg, endTime: newEnd, peakTime };
+    }
+
+    segs.sort((a, b) => a.startTime - b.startTime);
+    onZoomSegmentsChange(segs);
+  }, [duration, onZoomSegmentsChange, zoomSegments]);
+
   useEffect(() => {
     if (!dragging) return;
     const MIN_CLIP = 0.5;
     const handleMove = (e: PointerEvent) => {
       const time = posToTime(e.clientX);
-      if (dragging === 'start') onTrimChange(Math.max(0, Math.min(time, trimEnd - MIN_CLIP)), trimEnd);
-      else if (dragging === 'end') onTrimChange(trimStart, Math.min(duration, Math.max(time, trimStart + MIN_CLIP)));
-      else if (dragging === 'playhead') onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
+      if (dragging.type === 'trim-start') onTrimChange(Math.max(0, Math.min(time, trimEnd - MIN_CLIP)), trimEnd);
+      else if (dragging.type === 'trim-end') onTrimChange(trimStart, Math.min(duration, Math.max(time, trimStart + MIN_CLIP)));
+      else if (dragging.type === 'playhead') onSeek(Math.max(trimStart, Math.min(time, trimEnd)));
+      else if (dragging.type === 'zoom-start') updateZoomSegmentBoundary(dragging.index, 'start', time);
+      else if (dragging.type === 'zoom-end') updateZoomSegmentBoundary(dragging.index, 'end', time);
     };
     const handleUp = () => { setDragging(null); document.body.style.cursor = ''; };
     document.addEventListener('pointermove', handleMove);
     document.addEventListener('pointerup', handleUp);
     return () => { document.removeEventListener('pointermove', handleMove); document.removeEventListener('pointerup', handleUp); };
-  }, [dragging, posToTime, trimStart, trimEnd, duration, onTrimChange, onSeek]);
+  }, [dragging, posToTime, trimStart, trimEnd, duration, onTrimChange, onSeek, updateZoomSegmentBoundary]);
 
   const startPct = duration > 0 ? (trimStart / duration) * 100 : 0;
   const endPct = duration > 0 ? (trimEnd / duration) * 100 : 100;
@@ -178,18 +219,18 @@ function VideoTrimmer({
         </div>
 
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon-xs" className="rounded-sm" onClick={onSkipBack}>
+          <Button variant="ghost" size="icon-xs" className="rounded-none" onClick={onSkipBack}>
             <SkipBack size={11} />
           </Button>
           <Button
             variant="secondary"
             size="icon-sm"
-            className="rounded-sm"
+            className="rounded-none"
             onClick={onPlayPause}
           >
             {isPlaying ? <Pause size={12} /> : <Play size={12} className="ml-px" />}
           </Button>
-          <Button variant="ghost" size="icon-xs" className="rounded-sm" onClick={onSkipForward}>
+          <Button variant="ghost" size="icon-xs" className="rounded-none" onClick={onSkipForward}>
             <SkipForward size={11} />
           </Button>
         </div>
@@ -205,74 +246,134 @@ function VideoTrimmer({
         </div>
       </div>
 
-      {/* Timeline track with padding so handles never clip */}
-      <div className="px-[10px] pb-1">
+      {/* Timeline tracks — professional multi-track layout */}
+      <div className="px-[10px] pb-[10px]">
         <div
-          className="relative h-11 bg-muted rounded-sm cursor-pointer select-none"
+          className="relative bg-muted/20 border border-border/40 cursor-pointer select-none overflow-hidden"
           ref={trackRef}
           onClick={handleTrackClick}
         >
-          {/* Thumbnail strip — full opacity, dimming is handled by overlay regions */}
-          <div className="absolute inset-0 flex rounded-sm overflow-hidden">
-            {thumbsLoaded && thumbnails.length > 0
-              ? thumbnails.map((src, i) =>
-                  src ? (
-                    <img key={i} src={src} className="flex-1 min-w-0 object-cover" draggable={false} alt="" />
-                  ) : (
-                    <div key={i} className="flex-1 min-w-0 bg-muted" />
-                  ),
-                )
-              : (
-                  <div className="w-full h-full bg-muted flex items-center justify-center gap-2">
-                    <Loader2 size={14} className="animate-spin text-muted-foreground" />
-                    <span className="text-[10px] text-muted-foreground">Loading timeline...</span>
-                  </div>
-                )}
+          {/* Main Video Track (Thumbnails) */}
+          <div className="relative h-12 border-b border-border/20">
+            <div className="absolute inset-0 flex">
+              {thumbsLoaded && thumbnails.length > 0
+                ? thumbnails.map((src, i) =>
+                    src ? (
+                      <img key={i} src={src} className="flex-1 min-w-0 object-cover opacity-80" draggable={false} alt="" />
+                    ) : (
+                      <div key={i} className="flex-1 min-w-0 bg-muted/50" />
+                    ),
+                  )
+                : (
+                    <div className="w-full h-full bg-muted/30 flex items-center justify-center gap-2">
+                      <Loader2 size={14} className="animate-spin text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">Loading video track...</span>
+                    </div>
+                  )}
+            </div>
           </div>
 
-          {/* Dimmed regions */}
+          {/* Zoom Track (Bars) */}
+          {autoZoom && duration > 0 && (
+            <div className="relative h-7 shadow-inner bg-background/50 pointer-events-none">
+              <div className="absolute inset-y-0 w-full pointer-events-auto">
+                {zoomSegments.map((seg, i) => {
+                  const leftPct = (seg.startTime / duration) * 100;
+                  const widthPct = ((seg.endTime - seg.startTime) / duration) * 100;
+
+                  return (
+                    <div
+                      key={i}
+                      className="absolute top-[2px] bottom-[2px] bg-primary/20 border border-primary/40 shadow-none flex items-center justify-between overflow-hidden"
+                      style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+                      onClick={(e) => { e.stopPropagation(); onSeek(seg.startTime); }}
+                    >
+                      {/* Zoom content / fill */}
+                      <div className="absolute inset-0 bg-primary/10" />
+
+                      {/* Zoom Text Label */}
+                      <div className="absolute inset-0 flex items-center px-1.5 pointer-events-none z-[1] gap-1">
+                        <span className="text-[8px] font-bold italic text-background bg-primary px-1 py-[1px] rounded-[2px] opacity-90 leading-none">
+                          fx
+                        </span>
+                        <span className="text-[9px] font-semibold text-primary opacity-90 truncate leading-none mt-px w-full">
+                          Zoom {i + 1}
+                        </span>
+                      </div>
+
+                      {/* Zoom Peak marker */}
+                      <div
+                        className="absolute top-0 bottom-0 w-[2px] bg-primary/80 z-[1]"
+                        style={{ left: `${((seg.peakTime - seg.startTime) / (seg.endTime - seg.startTime)) * 100}%`, transform: 'translateX(-50%)' }}
+                      />
+
+                      {/* Zoom Start Handle */}
+                      <div
+                        className={cn(
+                          "w-2.5 h-full cursor-ew-resize hover:bg-primary/50 transition-colors z-[2]",
+                          dragging?.type === 'zoom-start' && dragging.index === i && 'bg-primary'
+                        )}
+                        onPointerDown={(e) => handlePointerDown(e, { type: 'zoom-start', index: i })}
+                      />
+                      
+                      {/* Zoom End Handle */}
+                      <div
+                        className={cn(
+                          "w-2.5 h-full cursor-ew-resize hover:bg-primary/50 transition-colors z-[2]",
+                          dragging?.type === 'zoom-end' && dragging.index === i && 'bg-primary'
+                        )}
+                        onPointerDown={(e) => handlePointerDown(e, { type: 'zoom-end', index: i })}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Dimmed regions (clip trimming) */}
           <div
-            className="absolute top-0 bottom-0 left-0 bg-black/55 z-[4] pointer-events-none rounded-l-sm"
+            className="absolute top-0 bottom-0 left-0 bg-black/60 z-[4] pointer-events-none"
             style={{ width: `${startPct}%` }}
           />
           <div
-            className="absolute top-0 bottom-0 right-0 bg-black/55 z-[4] pointer-events-none rounded-r-sm"
+            className="absolute top-0 bottom-0 right-0 bg-black/60 z-[4] pointer-events-none"
             style={{ width: `${100 - endPct}%` }}
           />
 
-          {/* Selected region top/bottom highlight */}
+          {/* Selected region highlight */}
           <div
             className="absolute top-0 bottom-0 border-y-2 border-primary/50 pointer-events-none z-[5]"
             style={{ left: `${startPct}%`, width: `${endPct - startPct}%` }}
           />
 
-          {/* Start handle — sits inside selection, at left edge */}
+          {/* Start Trim handle */}
           <div
             className={cn(
-              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/80 hover:bg-primary transition-colors rounded-l-sm',
-              dragging === 'start' && 'bg-primary'
+              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/90 hover:bg-primary transition-colors',
+              dragging?.type === 'trim-start' && 'bg-primary'
             )}
             style={{ left: `${startPct}%`, width: `${HANDLE_W}px` }}
-            onPointerDown={(e) => handlePointerDown(e, 'start')}
+            onPointerDown={(e) => handlePointerDown(e, { type: 'trim-start' })}
           >
-            <div className="flex gap-[2px]">
-              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
-              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+            <div className="flex flex-col gap-[3px]">
+              <span className="w-px h-2.5 bg-primary-foreground/60 rounded-none" />
+              <span className="w-px h-2.5 bg-primary-foreground/60 rounded-none" />
             </div>
           </div>
 
-          {/* End handle — sits inside selection, at right edge */}
+          {/* End Trim handle */}
           <div
             className={cn(
-              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/80 hover:bg-primary transition-colors rounded-r-sm',
-              dragging === 'end' && 'bg-primary'
+              'absolute top-0 bottom-0 z-10 cursor-ew-resize flex items-center justify-center bg-primary/90 hover:bg-primary transition-colors',
+              dragging?.type === 'trim-end' && 'bg-primary'
             )}
             style={{ right: `${100 - endPct}%`, width: `${HANDLE_W}px` }}
-            onPointerDown={(e) => handlePointerDown(e, 'end')}
+            onPointerDown={(e) => handlePointerDown(e, { type: 'trim-end' })}
           >
-            <div className="flex gap-[2px]">
-              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
-              <span className="w-px h-3 bg-primary-foreground/50 rounded-full" />
+            <div className="flex flex-col gap-[3px]">
+              <span className="w-px h-2.5 bg-primary-foreground/60 rounded-none" />
+              <span className="w-px h-2.5 bg-primary-foreground/60 rounded-none" />
             </div>
           </div>
 
@@ -280,20 +381,18 @@ function VideoTrimmer({
           <div
             className={cn(
               'absolute top-0 bottom-0 z-[15] cursor-grab pointer-events-auto flex justify-center',
-              dragging === 'playhead' && 'cursor-grabbing'
+              dragging?.type === 'playhead' && 'cursor-grabbing'
             )}
-            style={{ left: `${playheadPct}%`, width: '12px', transform: 'translateX(-50%)' }}
-            onPointerDown={(e) => handlePointerDown(e, 'playhead')}
+            style={{ left: `${playheadPct}%`, width: '14px', transform: 'translateX(-50%)' }}
+            onPointerDown={(e) => handlePointerDown(e, { type: 'playhead' })}
           >
-            {/* Playhead line */}
-            <div className="w-px h-full bg-foreground shadow-[0_0_3px_rgba(0,0,0,0.5)]" />
-            {/* Top triangle indicator */}
+            <div className="w-[1.5px] h-full bg-red-500 shadow-[0_0_4px_rgba(0,0,0,0.5)]" />
             <div
               className="absolute -top-px left-1/2 -translate-x-1/2 w-0 h-0"
               style={{
-                borderLeft: '4px solid transparent',
-                borderRight: '4px solid transparent',
-                borderTop: '5px solid var(--foreground)',
+                borderLeft: '5px solid transparent',
+                borderRight: '5px solid transparent',
+                borderTop: '6px solid rgb(239, 68, 68)',
               }}
             />
           </div>
@@ -371,7 +470,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [done, setDone] = useState(false);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [autoZoom, setAutoZoom] = useState(false);
+  const [autoZoom, setAutoZoom] = useState(true); // Default to true per user request
+  const [exportQuality, setExportQuality] = useState<ExportQuality>('high');
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgType, setBgType] = useState<BgType>('gradient');
   const [bgColor, setBgColor] = useState('#1e293b');
@@ -383,7 +483,13 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [shadowBlur, setShadowBlur] = useState(0);
   const [sideTab, setSideTab] = useState<SideTab>('trim');
   const [showDiscardModal, setShowDiscardModal] = useState(false);
+  const [loadedEvents, setLoadedEvents] = useState<InputEvent[]>([]);
+  const [loadedMeta, setLoadedMeta] = useState<RecordingMeta | null>(null);
+  const [zoomSegments, setZoomSegments] = useState<ZoomSegment[]>([]);
+  const [videoW, setVideoW] = useState(1920);
+  const [videoH, setVideoH] = useState(1080);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<PlayerRef>(null);
 
   useEffect(() => {
     if (!data?.sessionDir) return;
@@ -393,7 +499,34 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
       .catch((err: Error) => { setError(`Failed to prepare video: ${err.message}`); setRemuxing(false); });
   }, [data?.sessionDir]);
 
-  useEffect(() => { if (cleanPath && videoRef.current) videoRef.current.src = `file://${cleanPath}`; }, [cleanPath]);
+  // Load events for zoom preview / timeline
+  useEffect(() => {
+    if (!data?.sessionDir) return;
+    api.loadEvents(data.sessionDir)
+      .then((result: { events: InputEvent[]; meta: any }) => {
+        setLoadedEvents(result.events || []);
+        setLoadedMeta(result.meta || null);
+      })
+      .catch(() => { /* Events are optional */ });
+  }, [data?.sessionDir]);
+
+  // Generate initial zoom segments
+  useEffect(() => {
+    if (loadedEvents.length > 0 && videoDuration > 0) {
+      const { clicks } = splitEvents(loadedEvents);
+      const debounced = debounceClicks(clicks, 0.4);
+      setZoomSegments(computeZoomSegments(debounced, 1.5));
+    } else {
+      setZoomSegments([]);
+    }
+  }, [loadedEvents, videoDuration]);
+
+  useEffect(() => {
+    if (cleanPath && videoRef.current) {
+      videoRef.current.src = `file://${cleanPath}`;
+      videoRef.current.load();
+    }
+  }, [cleanPath]);
 
   useEffect(() => {
     const off1 = api.onProgress((d) => { setProgress(d.percent); if (d.phase) setPhase(d.phase); });
@@ -403,28 +536,61 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   }, []);
 
   const handleLoadedMetadata = useCallback(() => {
-    const dur = videoRef.current?.duration || 0;
+    const v = videoRef.current;
+    if (!v) return;
+    const dur = v.duration || 0;
     if (Number.isFinite(dur) && dur > 0) { setVideoDuration(dur); setTrimEnd(dur); }
+    if (v.videoWidth > 0) setVideoW(v.videoWidth);
+    if (v.videoHeight > 0) setVideoH(v.videoHeight);
   }, []);
 
   const handleTimeUpdate = useCallback(() => {
-    const time = videoRef.current?.currentTime || 0;
+    const p = playerRef.current;
+    if (!p) return;
+    const frame = p.getCurrentFrame();
+    const time = frame / 30;
     setCurrentTime(time);
-    if (time >= trimEnd - 0.05) { videoRef.current!.pause(); videoRef.current!.currentTime = trimStart; setIsPlaying(false); }
+    if (time >= trimEnd - 0.05) {
+      p.pause();
+      p.seekTo(Math.round(trimStart * 30));
+      setIsPlaying(false);
+    }
   }, [trimStart, trimEnd]);
 
+  // Poll Remotion Player for time updates (it doesn't fire onTimeUpdate like <video>)
+  useEffect(() => {
+    if (!isPlaying) return;
+    let rafId: number;
+    const tick = () => {
+      handleTimeUpdate();
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isPlaying, handleTimeUpdate]);
+
   const handlePlayPause = useCallback(() => {
-    if (!videoRef.current) return;
-    if (isPlaying) { videoRef.current.pause(); setIsPlaying(false); }
-    else {
-      if (videoRef.current.currentTime >= trimEnd - 0.1) videoRef.current.currentTime = trimStart;
-      if (videoRef.current.currentTime < trimStart || videoRef.current.currentTime > trimEnd) videoRef.current.currentTime = trimStart;
-      videoRef.current.play(); setIsPlaying(true);
+    const p = playerRef.current;
+    if (!p) return;
+    if (isPlaying) {
+      p.pause();
+      setIsPlaying(false);
+    } else {
+      const frame = p.getCurrentFrame();
+      const t = frame / 30;
+      if (t >= trimEnd - 0.1 || t < trimStart || t > trimEnd)
+        p.seekTo(Math.round(trimStart * 30));
+      p.play();
+      setIsPlaying(true);
     }
   }, [isPlaying, trimStart, trimEnd]);
 
   const handleSeek = useCallback((time: number) => {
-    if (videoRef.current) { videoRef.current.currentTime = time; setCurrentTime(time); }
+    const p = playerRef.current;
+    if (p) {
+      p.seekTo(Math.round(time * 30));
+      setCurrentTime(time);
+    }
   }, []);
 
   const handleTrimChange = useCallback((start: number, end: number) => { setTrimStart(start); setTrimEnd(end); }, []);
@@ -465,6 +631,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
       gradientEnd: bgEnabled && bgType === 'gradient' ? gradient.end : undefined,
       wallpaperFile: bgEnabled && bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
       imageBlur: bgEnabled && bgType === 'image' ? imageBlur : ('none' as const),
+      customZoomSegments: autoZoom ? zoomSegments : undefined,
+      exportQuality,
       ...(isTrimmed && { trimStart, trimEnd }),
     };
     try { await api.processVideo(exportOpts); }
@@ -482,10 +650,37 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const handleOpen = () => { if (outputPath) api.openOutput(outputPath); };
   const handleReExport = () => { setDone(false); setOutputPath(null); setProgress(0); setPhase(''); setError(null); };
 
-  const previewCanvasBg = !bgEnabled ? 'hsl(var(--card))' : bgType === 'color' ? bgColor : bgType === 'gradient' ? `linear-gradient(135deg, ${gradient.start}, ${gradient.end})` : bgType === 'image' ? 'transparent' : 'hsl(var(--card))';
-  const blurPx = imageBlur === 'moderate' ? 10 : imageBlur === 'strong' ? 24 : 0;
-  const shadowCss = bgEnabled && shadowBlur > 0 ? `0 ${Math.max(1, Math.round(shadowBlur * 0.4))}px ${shadowBlur}px rgba(0,0,0,0.65)` : 'none';
   const videoSrc = cleanPath ? `file://${cleanPath}` : null;
+
+  // ── Remotion composition props — re-computed when any setting changes ──
+  const fps = 30;
+  const pad = bgEnabled ? padding : 0;
+  const compositionW = videoW + pad * 2 + ((videoW + pad * 2) % 2);
+  const compositionH = videoH + pad * 2 + ((videoH + pad * 2) % 2);
+  const totalFrames = Math.max(1, Math.round(videoDuration * fps));
+
+  const compositionProps: ZoomCompositionProps = useMemo(() => ({
+    videoSrc: videoSrc || '',
+    events: autoZoom ? loadedEvents : [],
+    meta: autoZoom ? loadedMeta : null,
+    frameW: videoW,
+    frameH: videoH,
+    zoomFactor: 2.0,
+    holdDuration: 1.5,
+    withBackground: bgEnabled,
+    padding,
+    cornerRadius: bgEnabled ? cornerRadius : 0,
+    shadowBlur: bgEnabled ? shadowBlur : 0,
+    backgroundType: bgType === 'color' ? 'solid' : bgType === 'gradient' ? 'gradient' : 'image',
+    backgroundColor: bgColor,
+    gradientStart: gradient.start,
+    gradientEnd: gradient.end,
+    wallpaperFile: bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
+    imageBlur: bgType === 'image' ? imageBlur : 'none',
+    customZoomSegments: autoZoom ? zoomSegments : undefined,
+    isPlaying,
+  }), [videoSrc, loadedEvents, loadedMeta, videoW, videoH, autoZoom, bgEnabled, padding,
+    cornerRadius, shadowBlur, bgType, bgColor, gradient, wallpaperIdx, imageBlur, zoomSegments, isPlaying]);
 
   if (!data) {
     return (
@@ -591,31 +786,43 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
         </div>
       </div>
 
+      {/* Hidden video element — used only for duration detection + thumbnail generation */}
+      <video
+        ref={videoRef}
+        className="hidden"
+        onLoadedMetadata={handleLoadedMetadata}
+        muted
+      />
+
       {/* Body: video + sidebar */}
       <div className="flex-1 overflow-hidden flex min-h-0">
-        {/* Left: video preview */}
-        <div className="flex-1 min-w-0 flex items-center justify-center bg-background overflow-hidden relative">
-          {bgEnabled && bgType === 'image' && (
-            <div
-              className="absolute -inset-[30px] bg-cover bg-center z-0"
-              style={{ backgroundImage: `url(./Wallpapers/${WALLPAPERS[wallpaperIdx]})`, filter: blurPx > 0 ? `blur(${blurPx}px)` : 'none' }}
+        {/* Left: Remotion Player preview — renders the actual composition */}
+        <div className="flex-1 min-w-0 flex items-center justify-center bg-background overflow-hidden">
+          {videoSrc && videoDuration > 0 ? (
+            <Player<AnyZodObject, ZoomCompositionProps>
+              ref={playerRef}
+              component={ZoomComposition}
+              inputProps={compositionProps}
+              compositionWidth={compositionW}
+              compositionHeight={compositionH}
+              durationInFrames={totalFrames}
+              fps={fps}
+              style={{
+                width: '100%',
+                height: '100%',
+                maxWidth: '100%',
+                maxHeight: '100%',
+              }}
+              controls={false}
+              autoPlay={false}
+              loop={false}
             />
+          ) : (
+            <div className="flex items-center justify-center gap-2 text-muted-foreground">
+              <Loader2 size={16} className="animate-spin" />
+              <span className="text-xs">Loading preview...</span>
+            </div>
           )}
-          <div
-            className="flex items-center justify-center w-full h-full relative z-[1] transition-all duration-200"
-            style={{ background: previewCanvasBg, padding: bgEnabled ? `${Math.round(padding / 4)}px` : 0 }}
-          >
-            <video
-              ref={videoRef}
-              className="block max-w-full max-h-full w-auto h-auto object-contain bg-black outline-none shrink min-w-0 min-h-0"
-              style={{ borderRadius: bgEnabled ? `${cornerRadius}px` : 0, boxShadow: shadowCss }}
-              onLoadedMetadata={handleLoadedMetadata}
-              onTimeUpdate={handleTimeUpdate}
-              onEnded={() => setIsPlaying(false)}
-              onPause={() => setIsPlaying(false)}
-              onPlay={() => setIsPlaying(true)}
-            />
-          </div>
         </div>
 
         {/* Right sidebar */}
@@ -712,7 +919,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                         <div className="flex gap-1.5 flex-wrap">
                           {GRADIENT_PRESETS.map((g, i) => (
                             <button key={i}
-                              className={cn('w-5 h-5 rounded-sm border-2 border-transparent cursor-pointer transition-all hover:scale-110', gradientIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
+                              className={cn('w-5 h-5 rounded-sm cursor-pointer transition-all hover:scale-110', gradientIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
                               style={{ background: `linear-gradient(135deg, ${g.start}, ${g.end})` }} title={g.name} onClick={() => setGradientIdx(i)} />
                           ))}
                         </div>
@@ -726,8 +933,8 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                           <div className="grid grid-cols-4 gap-1.5">
                             {WALLPAPERS.map((w, i) => (
                               <button key={i}
-                                className={cn('aspect-[16/10] bg-cover bg-center rounded-sm border-2 border-transparent cursor-pointer transition-all p-0 hover:scale-105', wallpaperIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
-                                style={{ backgroundImage: `url(./Wallpapers/${w})` }}
+                                className={cn('aspect-[16/10] bg-cover bg-center rounded-sm cursor-pointer transition-all p-0 hover:scale-105', wallpaperIdx === i && 'border-foreground/40 ring-1 ring-foreground/10')}
+                                style={{ backgroundImage: `url(./Wallpapers/lowres/${w})` }}
                                 title={w.replace(/-thumb\.(jpg|jpeg)$/i, '').replace(/-thumbnail\.(jpg|jpeg)$/i, '')}
                                 onClick={() => setWallpaperIdx(i)} />
                             ))}
@@ -772,6 +979,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                           <Slider min={0} max={40} value={[shadowBlur]} onValueChange={(v) => setShadowBlur(Array.isArray(v) ? v[0] : v)} />
                         </div>
                       </div>
+                      <div></div>
                     </div>
                   </div>
                 </div>
@@ -779,7 +987,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
             )}
 
             {sideTab === 'effects' && (
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-3">
                 <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Effects</div>
                 <div className="mx-3 bg-secondary/30 rounded-md overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5">
@@ -792,6 +1000,24 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                     </div>
                     <Switch checked={autoZoom} onCheckedChange={setAutoZoom} />
                   </div>
+                </div>
+                <div className="mx-3 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quality</span>
+                    <span className="text-[9px] text-muted-foreground font-mono">
+                      {exportQuality === 'balanced' ? '~8 Mbps' : exportQuality === 'high' ? '~20 Mbps' : '~40 Mbps'}
+                    </span>
+                  </div>
+                  <ToggleGroup
+                    value={[exportQuality]}
+                    onValueChange={(v) => { const val = v[v.length - 1]; if (val) setExportQuality(val as ExportQuality); }}
+                    className="w-full"
+                  >
+                    <ToggleGroupItem value="balanced" className="flex-1 text-[10px] rounded-sm">Balanced</ToggleGroupItem>
+                    <ToggleGroupItem value="high" className="flex-1 text-[10px] rounded-sm">High</ToggleGroupItem>
+                    <ToggleGroupItem value="maximum" className="flex-1 text-[10px] rounded-sm">Maximum</ToggleGroupItem>
+                  </ToggleGroup>
+                  <span className="text-[9px] text-muted-foreground px-1">Higher quality increases file size.</span>
                 </div>
               </div>
             )}
@@ -813,6 +1039,9 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
           onPlayPause={handlePlayPause}
           onSkipBack={skipBackward}
           onSkipForward={skipForward}
+          autoZoom={autoZoom}
+          zoomSegments={zoomSegments}
+          onZoomSegmentsChange={setZoomSegments}
         />
       )}
 

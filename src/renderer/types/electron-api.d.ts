@@ -3,8 +3,11 @@ import type {
   CaptureSource,
   ExportOptions,
   ExportProgress,
+  ExportFileReaderHandle,
   AppSettings,
   InputEvent,
+  LoadedEvents,
+  RendererExportRequest,
 } from '../../shared/types';
 
 export interface ElectronAPI {
@@ -33,12 +36,29 @@ export interface ElectronAPI {
   // Sources
   getSources(): Promise<CaptureSource[]>;
 
+  // Events loading
+  loadEvents(sessionDir: string): Promise<LoadedEvents>;
+
   // Post-processing
   remuxVideo(sessionDir: string): Promise<string>;
   processVideo(opts: ExportOptions): Promise<void>;
   onProgress(callback: (data: ExportProgress) => void): () => void;
   onProcessingDone(callback: (data: { outputPath: string }) => void): () => void;
   onProcessingError(callback: (data: { error: string }) => void): () => void;
+
+  onExportJob(callback: (job: RendererExportRequest) => void): () => void;
+  notifyExportHostReady(): void;
+  notifyExportHostProgress(data: { jobId: string; progress: ExportProgress }): void;
+  notifyExportHostDone(data: { jobId: string; outputPath: string }): void;
+  notifyExportHostError(data: { jobId: string; error: string }): void;
+
+  openExportReader(filePath: string): Promise<ExportFileReaderHandle>;
+  readExportRange(readerId: string, start: number, end: number): Promise<ArrayBuffer>;
+  closeExportReader(readerId: string): Promise<void>;
+  openExportWriter(filePath: string): Promise<string>;
+  writeExportChunk(writerId: string, position: number, data: Uint8Array | ArrayBuffer): Promise<void>;
+  closeExportWriter(writerId: string): Promise<void>;
+  abortExportWriter(writerId: string): Promise<void>;
 
   // Settings
   getSettings(): Promise<AppSettings>;

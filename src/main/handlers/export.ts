@@ -1,16 +1,39 @@
 // Export / post-processing handlers
 
 import { IpcMainInvokeEvent } from 'electron';
+import { randomUUID } from 'crypto';
 import fs from 'fs';
+import type { FileHandle } from 'fs/promises';
 import path from 'path';
-import { RAW_RECORDING_FILE, CLEAN_MP4_FILE } from '../../shared/constants';
+import { RAW_RECORDING_FILE, CLEAN_MP4_FILE, EVENTS_FILE, META_FILE } from '../../shared/constants';
+import type { ExportFileReaderHandle } from '../../shared/types';
 import { remuxToCleanMp4 } from '../services/ffmpeg';
 import { processVideo } from '../services/export-pipeline';
 import { getSettings } from '../services/settings';
 import { getMainWindow } from '../windows/main-window';
 import { getRecordingSession } from './recording';
 import { IPC } from '../../shared/constants';
-import type { ExportOptions } from '../../shared/types';
+import type { ExportOptions, LoadedEvents } from '../../shared/types';
+
+interface ExportFileSession {
+  filePath: string;
+  handle: FileHandle;
+}
+
+const exportReaders = new Map<string, ExportFileSession>();
+const exportWriters = new Map<string, ExportFileSession>();
+
+async function closeExportSession(
+  store: Map<string, ExportFileSession>,
+  id: string,
+): Promise<ExportFileSession | null> {
+  const session = store.get(id) ?? null;
+  if (!session) return null;
+
+  store.delete(id);
+  await session.handle.close();
+  return session;
+}
 
 export async function handleRemuxVideo(
   _event: IpcMainInvokeEvent,
@@ -75,6 +98,7 @@ export async function handleProcessVideo(
       autoZoom: !!opts.autoZoom,
       zoomFactor: settings.zoomFactor,
       zoomDuration: settings.zoomDuration,
+      customZoomSegments: opts.customZoomSegments,
 
       background: !!opts.background,
       cornerRadius: opts.cornerRadius ?? 12,
@@ -86,6 +110,7 @@ export async function handleProcessVideo(
       gradientEnd: opts.gradientEnd ?? '#764ba2',
       wallpaperPath,
       imageBlur: opts.imageBlur ?? 'none',
+      exportQuality: opts.exportQuality ?? 'high',
 
       trimStart: opts.trimStart,
       trimEnd: opts.trimEnd,
@@ -100,5 +125,120 @@ export async function handleProcessVideo(
   } catch (err: any) {
     mainWindow?.webContents.send(IPC.PROCESSING_ERROR, { error: err.message });
     throw err;
+  }
+}
+
+export async function handleLoadEvents(
+  _event: IpcMainInvokeEvent,
+  sessionDir: string,
+): Promise<LoadedEvents> {
+  const eventsPath = path.join(sessionDir, EVENTS_FILE);
+  const metaPath = path.join(sessionDir, META_FILE);
+
+  let events: any[] = [];
+  if (fs.existsSync(eventsPath)) {
+    try {
+      const raw = fs.readFileSync(eventsPath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) events = parsed;
+    } catch (err) {
+      console.warn(`[Events] Failed to parse ${eventsPath}:`, err);
+    }
+  }
+
+  let meta: any = null;
+  if (fs.existsSync(metaPath)) {
+    try {
+      meta = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    } catch (err) {
+      console.warn(`[Events] Failed to parse ${metaPath}:`, err);
+    }
+  }
+
+  return { events, meta };
+}
+
+export async function handleExportOpenReader(
+  _event: IpcMainInvokeEvent,
+  filePath: string,
+): Promise<ExportFileReaderHandle> {
+  const stat = await fs.promises.stat(filePath);
+  const readerId = randomUUID();
+  const handle = await fs.promises.open(filePath, 'r');
+  exportReaders.set(readerId, { filePath, handle });
+  return { readerId, size: stat.size };
+}
+
+export async function handleExportReadRange(
+  _event: IpcMainInvokeEvent,
+  readerId: string,
+  start: number,
+  end: number,
+): Promise<ArrayBuffer> {
+  const session = exportReaders.get(readerId);
+  if (!session) throw new Error(`Unknown export reader: ${readerId}`);
+
+  const safeStart = Math.max(0, Math.floor(start));
+  const safeEnd = Math.max(safeStart, Math.floor(end));
+  const length = safeEnd - safeStart;
+  const bytes = new Uint8Array(length);
+
+  if (length === 0) {
+    return bytes.buffer;
+  }
+
+  const { bytesRead } = await session.handle.read(bytes, 0, length, safeStart);
+  return bytes.buffer.slice(0, bytesRead);
+}
+
+export async function handleExportCloseReader(
+  _event: IpcMainInvokeEvent,
+  readerId: string,
+): Promise<void> {
+  await closeExportSession(exportReaders, readerId);
+}
+
+export async function handleExportOpenWriter(
+  _event: IpcMainInvokeEvent,
+  filePath: string,
+): Promise<string> {
+  await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+  const writerId = randomUUID();
+  const handle = await fs.promises.open(filePath, 'w');
+  exportWriters.set(writerId, { filePath, handle });
+  return writerId;
+}
+
+export async function handleExportWriteChunk(
+  _event: IpcMainInvokeEvent,
+  writerId: string,
+  position: number,
+  data: Uint8Array | ArrayBuffer,
+): Promise<void> {
+  const session = exportWriters.get(writerId);
+  if (!session) throw new Error(`Unknown export writer: ${writerId}`);
+
+  const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+  await session.handle.write(bytes, 0, bytes.byteLength, Math.max(0, Math.floor(position)));
+}
+
+export async function handleExportCloseWriter(
+  _event: IpcMainInvokeEvent,
+  writerId: string,
+): Promise<void> {
+  await closeExportSession(exportWriters, writerId);
+}
+
+export async function handleExportAbortWriter(
+  _event: IpcMainInvokeEvent,
+  writerId: string,
+): Promise<void> {
+  const session = await closeExportSession(exportWriters, writerId);
+  if (!session) return;
+
+  try {
+    await fs.promises.unlink(session.filePath);
+  } catch {
+    // Ignore missing partial files.
   }
 }
