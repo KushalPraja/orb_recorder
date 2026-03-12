@@ -57,6 +57,13 @@ export function registerIpcHandlers(): void {
   // ── Post-processing / export ──────────────────────────────────
   ipcMain.handle(IPC.REMUX_VIDEO, exportHandlers.handleRemuxVideo);
   ipcMain.handle(IPC.PROCESS_VIDEO, exportHandlers.handleProcessVideo);
+  ipcMain.handle(IPC.EXPORT_OPEN_READER, exportHandlers.handleExportOpenReader);
+  ipcMain.handle(IPC.EXPORT_READ_RANGE, exportHandlers.handleExportReadRange);
+  ipcMain.handle(IPC.EXPORT_CLOSE_READER, exportHandlers.handleExportCloseReader);
+  ipcMain.handle(IPC.EXPORT_OPEN_WRITER, exportHandlers.handleExportOpenWriter);
+  ipcMain.handle(IPC.EXPORT_WRITE_CHUNK, exportHandlers.handleExportWriteChunk);
+  ipcMain.handle(IPC.EXPORT_CLOSE_WRITER, exportHandlers.handleExportCloseWriter);
+  ipcMain.handle(IPC.EXPORT_ABORT_WRITER, exportHandlers.handleExportAbortWriter);
 
   // ── Events loading ──────────────────────────────────────────
   ipcMain.handle(IPC.LOAD_EVENTS, exportHandlers.handleLoadEvents);

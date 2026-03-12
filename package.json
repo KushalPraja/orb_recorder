@@ -14,14 +14,16 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+
     "@remotion/bundler": "^4.0.434",
     "@remotion/cli": "^4.0.434",
     "@remotion/player": "^4.0.434",
     "@remotion/renderer": "^4.0.434",
+    "mediabunny": "^1.38.1",
     "remotion": "^4.0.434",
-    "uiohook-napi": "^1.5.4"
-  },
-  "devDependencies": {
     "@base-ui/react": "^1.2.0",
     "@electron-toolkit/utils": "^4.0.0",
     "@fontsource-variable/geist": "^5.2.8",

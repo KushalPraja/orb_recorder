@@ -12,7 +12,7 @@ import { BackgroundLayer } from './BackgroundLayer';
 import { RippleOverlay } from './RippleOverlay';
 import type { InputEvent } from '../../../shared/types';
 
-export interface ZoomCompositionProps {
+export interface ZoomCompositionProps extends Record<string, unknown> {
   videoSrc: string;
   events: InputEvent[];
   meta?: { originX?: number; originY?: number; scaleFactor?: number; captureWidth?: number } | null;
@@ -20,6 +20,7 @@ export interface ZoomCompositionProps {
   frameH: number;
   zoomFactor: number;
   holdDuration: number;
+  customZoomSegments?: import('../../../shared/types').ZoomSegment[];
 
   // Background settings
   withBackground: boolean;
@@ -60,6 +61,7 @@ export const ZoomComposition: React.FC<ZoomCompositionProps> = (props) => {
     wallpaperFile,
     imageBlur,
     isPlaying = false,
+    customZoomSegments,
   } = props;
 
   const pad = withBackground ? padding : 0;
@@ -78,9 +80,10 @@ export const ZoomComposition: React.FC<ZoomCompositionProps> = (props) => {
       holdDuration,
       padding: pad,
       meta,
+      customSegments: customZoomSegments,
     };
     return new ZoomEngine(config, events);
-  }, [canvasW, canvasH, frameW, frameH, fps, zoomFactor, holdDuration, pad, meta, events]);
+  }, [canvasW, canvasH, frameW, frameH, fps, zoomFactor, holdDuration, pad, meta, events, customZoomSegments]);
 
   const state = engine.computeFrameState(frame);
   const { crop } = state;

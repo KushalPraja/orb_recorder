@@ -29,6 +29,7 @@ export interface ZoomEngineConfig {
   holdDuration: number;
   padding: number;
   meta?: { originX?: number; originY?: number; scaleFactor?: number; captureWidth?: number } | null;
+  customSegments?: ZoomSegment[];
 }
 
 export interface FrameState {
@@ -76,8 +77,8 @@ export class ZoomEngine {
     this.cursor = new CursorInterpolator(movesC);
     this.ripples = this.clicks.map((c) => new ClickRipple(c.x, c.y, c.timestamp));
 
-    // Compute zoom segments for timeline
-    this.segments = computeZoomSegments(this.clicks, config.holdDuration);
+    // Compute zoom segments for timeline or use custom
+    this.segments = config.customSegments ? config.customSegments : computeZoomSegments(this.clicks, config.holdDuration);
 
     // Initialize camera
     this.camera = new SmoothCamera(config.canvasW, config.canvasH, config.fps);

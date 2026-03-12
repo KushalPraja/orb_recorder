@@ -111,12 +111,14 @@ export interface AppSettings {
 
 export type BackgroundType = 'solid' | 'gradient' | 'image';
 export type ImageBlur = 'none' | 'moderate' | 'strong';
+export type ExportQuality = 'balanced' | 'high' | 'maximum';
 
 export interface ExportOptions {
   sessionDir?: string;
   exportPath?: string;
   autoZoom?: boolean;
   zoomKeyframes?: ZoomKeyframe[];
+  customZoomSegments?: ZoomSegment[];
 
   // Visual
   background?: boolean;
@@ -130,6 +132,9 @@ export interface ExportOptions {
   wallpaperFile?: string;
   imageBlur?: ImageBlur;
 
+  // Quality
+  exportQuality?: ExportQuality;
+
   // Trim
   trimStart?: number;
   trimEnd?: number;
@@ -138,6 +143,37 @@ export interface ExportOptions {
 export interface ExportProgress {
   percent: number;
   phase: string;
+}
+
+export interface ExportFileReaderHandle {
+  readerId: string;
+  size: number;
+}
+
+export interface RendererExportRequest {
+  jobId: string;
+  inputPath: string;
+  outputPath: string;
+  events: InputEvent[];
+  meta: RecordingMeta | null;
+  fps: number;
+  autoZoom: boolean;
+  zoomFactor: number;
+  zoomDuration: number;
+  customZoomSegments?: ZoomSegment[];
+  background: boolean;
+  cornerRadius: number;
+  padding: number;
+  shadowBlur: number;
+  backgroundType: BackgroundType;
+  backgroundColor: string;
+  gradientStart: string;
+  gradientEnd: string;
+  wallpaperPath: string | null;
+  imageBlur: ImageBlur;
+  exportQuality: ExportQuality;
+  trimStart?: number;
+  trimEnd?: number;
 }
 
 // ─── Video Probe ─────────────────────────────────────────────────────────────
