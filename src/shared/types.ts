@@ -111,6 +111,7 @@ export interface AppSettings {
 
 export type BackgroundType = 'solid' | 'gradient' | 'image';
 export type ImageBlur = 'none' | 'moderate' | 'strong';
+export type ExportQuality = 'balanced' | 'high' | 'maximum';
 
 export interface ExportOptions {
   sessionDir?: string;
@@ -130,6 +131,9 @@ export interface ExportOptions {
   gradientEnd?: string;
   wallpaperFile?: string;
   imageBlur?: ImageBlur;
+
+  // Quality
+  exportQuality?: ExportQuality;
 
   // Trim
   trimStart?: number;
@@ -167,6 +171,7 @@ export interface RendererExportRequest {
   gradientEnd: string;
   wallpaperPath: string | null;
   imageBlur: ImageBlur;
+  exportQuality: ExportQuality;
   trimStart?: number;
   trimEnd?: number;
 }

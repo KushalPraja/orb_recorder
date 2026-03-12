@@ -110,6 +110,7 @@ export async function handleProcessVideo(
       gradientEnd: opts.gradientEnd ?? '#764ba2',
       wallpaperPath,
       imageBlur: opts.imageBlur ?? 'none',
+      exportQuality: opts.exportQuality ?? 'high',
 
       trimStart: opts.trimStart,
       trimEnd: opts.trimEnd,

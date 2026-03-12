@@ -136,7 +136,12 @@ export class CanvasExportComposer {
   private readonly staticCanvas: ExportCanvas;
   private readonly outputCanvas: ExportCanvas | null;
   private readonly outputContext: ExportContext2D | null;
+  private readonly videoCanvas: ExportCanvas | null;
+  private readonly videoContext: ExportContext2D | null;
   private readonly zoomEngine: ZoomEngine | null;
+  // GPU-resident bitmaps pre-built at init time to avoid per-frame path/copy overhead.
+  private staticBitmap: ImageBitmap | null = null;
+  private cornerMaskBitmap: ImageBitmap | null = null;
 
   private constructor(config: CanvasComposerConfig) {
     const { frameWidth, frameHeight, events, meta, request, wallpaper } = config;
@@ -162,6 +167,11 @@ export class CanvasExportComposer {
     this.staticCanvas = createCanvas(this.outputWidth, this.outputHeight);
     this.outputCanvas = request.autoZoom ? createCanvas(this.outputWidth, this.outputHeight) : null;
     this.outputContext = this.outputCanvas ? getContext(this.outputCanvas) : null;
+    // Separate small canvas used only for per-frame corner-mask compositing.
+    this.videoCanvas = (this.background && this.cornerRadius > 0)
+      ? createCanvas(this.frameWidth, this.frameHeight)
+      : null;
+    this.videoContext = this.videoCanvas ? getContext(this.videoCanvas) : null;
 
     this.buildStaticLayer();
 
@@ -182,7 +192,26 @@ export class CanvasExportComposer {
   }
 
   static async create(config: CanvasComposerConfig): Promise<CanvasExportComposer> {
-    return new CanvasExportComposer(config);
+    const instance = new CanvasExportComposer(config);
+
+    // Upload the fully-drawn static background as a GPU-resident ImageBitmap so
+    // each frame's drawImage() skips the canvas→canvas readback pipeline stall.
+    instance.staticBitmap = await createImageBitmap(instance.staticCanvas);
+
+    // Pre-render the corner-mask once so compose() never recomputes the rounded-
+    // rect path.  The mask is a white rounded rectangle on a transparent canvas;
+    // compositing it with 'destination-in' clips the video frame to that shape.
+    if (instance.background && instance.cornerRadius > 0) {
+      const maskCanvas = createCanvas(instance.frameWidth, instance.frameHeight);
+      const maskCtx = getContext(maskCanvas);
+      maskCtx.clearRect(0, 0, instance.frameWidth, instance.frameHeight);
+      drawRoundedRectPath(maskCtx, 0, 0, instance.frameWidth, instance.frameHeight, instance.cornerRadius);
+      maskCtx.fillStyle = '#ffffff';
+      maskCtx.fill();
+      instance.cornerMaskBitmap = await createImageBitmap(maskCanvas);
+    }
+
+    return instance;
   }
 
   private buildStaticLayer(): void {
@@ -229,22 +258,18 @@ export class CanvasExportComposer {
   }
 
   compose(sample: VideoSample): ExportCanvas {
-    this.sceneContext.clearRect(0, 0, this.outputWidth, this.outputHeight);
-    this.sceneContext.drawImage(this.staticCanvas, 0, 0);
+    // The static bitmap covers every pixel: no clearRect needed.
+    this.sceneContext.drawImage(this.staticBitmap ?? this.staticCanvas, 0, 0);
 
-    if (this.background && this.cornerRadius > 0) {
-      this.sceneContext.save();
-      drawRoundedRectPath(
-        this.sceneContext,
-        this.padding,
-        this.padding,
-        this.frameWidth,
-        this.frameHeight,
-        this.cornerRadius,
-      );
-      this.sceneContext.clip();
-      sample.draw(this.sceneContext, this.padding, this.padding, this.frameWidth, this.frameHeight);
-      this.sceneContext.restore();
+    if (this.cornerMaskBitmap && this.videoCanvas && this.videoContext) {
+      // Corner-masking via pre-built ImageBitmap + destination-in compositing.
+      // This replaces per-frame save/clip-path/restore which is O(path length).
+      this.videoContext.clearRect(0, 0, this.frameWidth, this.frameHeight);
+      sample.draw(this.videoContext, 0, 0, this.frameWidth, this.frameHeight);
+      this.videoContext.globalCompositeOperation = 'destination-in';
+      this.videoContext.drawImage(this.cornerMaskBitmap, 0, 0);
+      this.videoContext.globalCompositeOperation = 'source-over';
+      this.sceneContext.drawImage(this.videoCanvas, this.padding, this.padding);
     } else {
       sample.draw(this.sceneContext, this.padding, this.padding, this.frameWidth, this.frameHeight);
     }
@@ -273,5 +298,7 @@ export class CanvasExportComposer {
 
   dispose(): void {
     this.wallpaper?.close?.();
+    this.staticBitmap?.close();
+    this.cornerMaskBitmap?.close();
   }
 }

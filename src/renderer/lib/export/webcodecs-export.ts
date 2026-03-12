@@ -11,6 +11,21 @@ import {
   type StreamTargetChunk,
   type VideoSample,
 } from 'mediabunny';
+import type { ExportQuality } from '../../../shared/types';
+
+/**
+ * Returns the target video bitrate (bps) for the requested quality tier.
+ * 'balanced' matches the mediabunny QUALITY_HIGH constant so existing exports
+ * are unchanged.  'high' scales with pixel count (~20 Mbps at 1080p).  'maximum'
+ * is capped at 40 Mbps for visually lossless output at any resolution.
+ */
+function qualityBitrate(quality: ExportQuality, width: number, height: number): number {
+  if (quality === 'maximum') return 40_000_000;
+  if (quality === 'high') return Math.min(Math.round(width * height * 30 * 0.15), 25_000_000);
+  if (quality === 'balanced') return 8_000_000;
+  return 8_000_000;
+}
+
 import { CanvasExportComposer } from './canvas-compositor';
 import { ElectronFileSource } from './electron-file-source';
 import type { ExportProgress, InputEvent, RendererExportRequest } from '../../../shared/types';
@@ -218,10 +233,11 @@ export async function runWebCodecsExport(
     });
 
     const activeComposer = composer;
+    const videoBitrate = qualityBitrate(request.exportQuality, outputWidth, outputHeight);
     const videoOptions = activeComposer
       ? () => ({
           frameRate: request.fps,
-          bitrate: QUALITY_HIGH,
+          bitrate: videoBitrate,
           hardwareAcceleration: 'prefer-hardware' as const,
           forceTranscode: true,
           process: (sample: VideoSample) => activeComposer.compose(sample),

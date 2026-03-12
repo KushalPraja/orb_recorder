@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils';
 import { ZoomComposition, type ZoomCompositionProps } from '@/components/remotion/ZoomComposition';
 import { computeZoomSegments, debounceClicks, splitEvents } from '@/lib/zoom-engine';
 import type { NavigateFunction, ReviewData } from '../types';
-import type { ImageBlur, InputEvent, RecordingMeta, ZoomSegment } from '../../shared/types';
+import type { ImageBlur, InputEvent, RecordingMeta, ZoomSegment, ExportQuality } from '../../shared/types';
 
 const api = window.electronAPI;
 
@@ -471,6 +471,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [autoZoom, setAutoZoom] = useState(true); // Default to true per user request
+  const [exportQuality, setExportQuality] = useState<ExportQuality>('high');
   const [bgEnabled, setBgEnabled] = useState(true);
   const [bgType, setBgType] = useState<BgType>('gradient');
   const [bgColor, setBgColor] = useState('#1e293b');
@@ -631,6 +632,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
       wallpaperFile: bgEnabled && bgType === 'image' ? WALLPAPERS[wallpaperIdx] : undefined,
       imageBlur: bgEnabled && bgType === 'image' ? imageBlur : ('none' as const),
       customZoomSegments: autoZoom ? zoomSegments : undefined,
+      exportQuality,
       ...(isTrimmed && { trimStart, trimEnd }),
     };
     try { await api.processVideo(exportOpts); }
@@ -985,7 +987,7 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
             )}
 
             {sideTab === 'effects' && (
-              <div className="flex flex-col">
+              <div className="flex flex-col gap-3">
                 <div className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Effects</div>
                 <div className="mx-3 bg-secondary/30 rounded-md overflow-hidden">
                   <div className="flex items-center justify-between px-3 py-2.5">
@@ -998,6 +1000,24 @@ export function ReviewPage({ data, onNavigate }: ReviewPageProps) {
                     </div>
                     <Switch checked={autoZoom} onCheckedChange={setAutoZoom} />
                   </div>
+                </div>
+                <div className="mx-3 flex flex-col gap-1.5">
+                  <div className="flex items-center justify-between px-1">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Quality</span>
+                    <span className="text-[9px] text-muted-foreground font-mono">
+                      {exportQuality === 'balanced' ? '~8 Mbps' : exportQuality === 'high' ? '~20 Mbps' : '~40 Mbps'}
+                    </span>
+                  </div>
+                  <ToggleGroup
+                    value={[exportQuality]}
+                    onValueChange={(v) => { const val = v[v.length - 1]; if (val) setExportQuality(val as ExportQuality); }}
+                    className="w-full"
+                  >
+                    <ToggleGroupItem value="balanced" className="flex-1 text-[10px] rounded-sm">Balanced</ToggleGroupItem>
+                    <ToggleGroupItem value="high" className="flex-1 text-[10px] rounded-sm">High</ToggleGroupItem>
+                    <ToggleGroupItem value="maximum" className="flex-1 text-[10px] rounded-sm">Maximum</ToggleGroupItem>
+                  </ToggleGroup>
+                  <span className="text-[9px] text-muted-foreground px-1">Higher quality increases file size.</span>
                 </div>
               </div>
             )}

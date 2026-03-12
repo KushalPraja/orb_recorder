@@ -13,6 +13,7 @@ import {
 } from '../../shared/constants';
 import type {
   ExportProgress,
+  ExportQuality,
   ImageBlur,
   InputEvent,
   RecordingMeta,
@@ -86,6 +87,7 @@ export interface ProcessVideoOptions {
   gradientEnd?: string;
   wallpaperPath?: string | null;
   imageBlur?: ImageBlur;
+  exportQuality?: ExportQuality;
   trimStart?: number;
   trimEnd?: number;
 }
@@ -110,9 +112,33 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     gradientEnd = '#764ba2',
     wallpaperPath = null,
     imageBlur = 'none',
+    exportQuality = 'balanced',
     trimStart,
     trimEnd,
   } = opts;
+
+  console.log(`[Export] Starting export with options:`, {
+    recordingDir,
+    outputPath,
+    autoZoom,
+    zoomFactor,
+    zoomDuration,
+    customZoomSegments,
+    fps,
+    background,
+    cornerRadius,
+    padding,
+    shadowBlur,
+    backgroundType,
+    backgroundColor,
+    gradientStart,
+    gradientEnd,
+    wallpaperPath,
+    imageBlur,
+    exportQuality,
+    trimStart,
+    trimEnd,
+  });
 
   const outPath = outputPath ?? path.join(recordingDir, OUTPUT_FILE);
   const inputPath = pickExportInput(recordingDir);
@@ -145,6 +171,7 @@ export async function processVideo(opts: ProcessVideoOptions): Promise<string> {
     gradientEnd,
     wallpaperPath,
     imageBlur,
+    exportQuality,
     ...trim,
   };
 
