@@ -1,46 +1,100 @@
-# Screen Recorder
+# Orb Recorder
 
-A desktop screen recorder that automatically edits your recordings with smooth zoom and pan effects on every click and scroll — like [Screen Studio](https://www.screen.studio/), but open-source and free.
+Orb Recorder is an open-source desktop screen recorder that automatically applies smooth zoom and pan effects to your recordings. Every mouse click and scroll triggers a spring-animated camera movement, producing polished output without any manual editing — similar to [Screen Studio](https://www.screen.studio/), but free.
 
-Built with **Electron**, **React**, and **Python** (OpenCV).
-
+Built with **Electron**, **React**.
 ---
 
 ## Features
 
-- 🖥 Screen source selection with live thumbnails
-- 🔴 One-click recording with countdown overlay and floating stop bar
-- 🔍 Auto-zoom on mouse clicks with spring-smooth camera motion
-- 🖱 Scroll-based camera panning
-- 💾 Recordings library with preview and delete
-- ⚙️ Persistent settings (FPS, zoom level, hold duration, output folder)
+- Screen source selection with live thumbnails
+- One-click recording with a countdown overlay and floating stop bar
+- Automatic zoom on mouse clicks driven by a spring-physics camera model
+- Scroll-based camera panning
+- Recordings library with thumbnail previews and delete support
+- Persistent settings: FPS, zoom factor, hold duration, and output folder
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Shell | Electron 40 |
-| UI | React 19 + Vite 7 |
-| Input capture | uiohook-napi (global mouse/scroll hooks) |
-| Video muxing | ffmpeg-static / ffprobe-static |
+| Layer           | Technology                                         |
+| --------------- | -------------------------------------------------- |
+| Shell           | Electron 40                                        |
+| UI              | React 19 + Vite 7                                  |
+| Input capture   | uiohook-napi (global mouse/scroll hooks)           |
+| Video rendering | Remotion 4                                         |
+| Video muxing    | ffmpeg-static / ffprobe-static                     |
 | Post-processing | Python 3 + OpenCV + NumPy (via PyInstaller binary) |
-| Packaging | Electron Forge + Squirrel (Windows) |
+| Packaging       | electron-builder                                   |
+
+---
+
+## Requirements
+
+| Tool    | Version                                                             |
+| ------- | ------------------------------------------------------------------- |
+| Node.js | 20 LTS or later                                                     |
+| pnpm    | 9 or later                                                          |
+| Python  | 3.10 or later (only required to rebuild the video processor binary) |
 
 ---
 
 ## Quick Start
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full setup guide.
+```bash
+# Clone the repository
+git clone https://github.com/your-username/orb-recorder.git
+cd orb-recorder
+
+# Install dependencies
+pnpm install
+
+# Start in development mode (hot-reload)
+pnpm dev
+```
+
+`pnpm dev` starts two processes in parallel:
+
+- **Vite** on `http://localhost:5173` — compiles the React renderer
+- **Electron** — waits for Vite, then opens the main window with DevTools attached
+
+Changes to `src/renderer/**` hot-reload instantly. Changes to `src/main/**` require restarting Electron (`Ctrl+C`, then `pnpm dev` again).
+
+### Production build
 
 ```bash
-pnpm install
-pnpm dev       # hot-reload dev mode
+pnpm dist      # builds and packages a distributable installer
 ```
 
 ---
 
-## License
+## Project Structure
 
-MIT
+```
+orb-recorder/
+├── assets/                     # App icons
+├── scripts/
+│   ├── process.py              # Python video post-processor (OpenCV)
+│   └── build-processor.js      # Compiles process.py → bin/screen_processor.exe
+├── src/
+│   ├── shared/
+│   │   └── constants.ts        # IPC channel names and default settings
+│   ├── main/                   # Electron main process (Node.js)
+│   │   ├── index.ts            # App entry point
+│   │   ├── preload.ts          # contextBridge — exposes electronAPI to renderer
+│   │   ├── handlers/           # ipcMain.handle() registrations
+│   │   ├── services/           # Input tracking, FFmpeg, session management
+│   │   └── windows/            # BrowserWindow factories
+│   └── renderer/               # React app (Vite, runs in Chromium)
+│       ├── pages/              # HomePage, RecordPage, ReviewPage, SettingsPage
+│       ├── components/         # Shared UI components
+│       └── contexts/           # SettingsContext — shared settings store
+└── electron-builder.yml        # Packaging configuration
+```
+
+---
+
+## Contributing
+
+## See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture details, IPC conventions, how to add new settings, and the pull request checklist.
