@@ -100,4 +100,7 @@ orb-recorder/
 └── electron-builder.yml        # Packaging configuration
 ```
 
+
+https://github.com/user-attachments/assets/ffbd5351-27c8-41ba-bd12-31ded307c6ac
+
 ---
