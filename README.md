@@ -1,9 +1,16 @@
-# Orb Recorder
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/f831a6f0-9cef-4848-90ef-5f03b7a47235" width="80" />
+  <h1>Orb Recorder</h1>
+  <p>A desktop screen recorder that automatically applies smooth zoom and pan effects to your recordings.</p>
 
-Orb Recorder is an open-source desktop screen recorder that automatically applies smooth zoom and pan effects to your recordings. Every mouse click and scroll triggers a spring-animated camera movement, producing polished output without any manual editing.
+  <img src="https://img.shields.io/badge/Electron-2B2E3A?style=flat&logo=electron&logoColor=9FEAF9" />
+  <img src="https://img.shields.io/badge/React-20232A?style=flat&logo=react&logoColor=61DAFB" />
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat" />
+</div>
 
-Built with **Electron**, **React**.
 ---
+
+Orb Recorder is an open-source desktop screen recorder that automatically applies **smooth zoom and pan effects** to your recordings. Every mouse click and scroll triggers a spring-animated camera movement, producing polished output without any manual editing.
 
 ## Features
 
