@@ -8,6 +8,10 @@
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey?style=flat" />
 </div>
 
+
+https://github.com/user-attachments/assets/ffbd5351-27c8-41ba-bd12-31ded307c6ac
+
+
 ---
 
 Orb Recorder is an open-source desktop screen recorder that automatically applies **smooth zoom and pan effects** to your recordings. Every mouse click and scroll triggers a spring-animated camera movement, producing polished output without any manual editing.
@@ -99,8 +103,5 @@ orb-recorder/
 │       └── contexts/           # SettingsContext — shared settings store
 └── electron-builder.yml        # Packaging configuration
 ```
-
-
-https://github.com/user-attachments/assets/ffbd5351-27c8-41ba-bd12-31ded307c6ac
 
 ---
