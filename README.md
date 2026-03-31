@@ -9,8 +9,14 @@
 </div>
 
 
-https://github.com/user-attachments/assets/ffbd5351-27c8-41ba-bd12-31ded307c6ac
-
+<video src="https://github.com/user-attachments/assets/ffbd5351-27c8-41ba-bd12-31ded307c6ac"
+       autoplay
+       muted
+       loop
+       controls
+       playsinline
+       style="max-width: 100%;">
+</video>
 
 ---
 
